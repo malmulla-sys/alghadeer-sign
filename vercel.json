@@ -41,6 +41,10 @@
       "dest": "/requests.html"
     },
     {
+      "src": "/logo.png",
+      "dest": "/logo.png"
+    },
+    {
       "src": "/sign/(.*)",
       "dest": "/index.html?id=$1"
     },
@@ -49,7 +53,11 @@
       "dest": "/index.html?id=$1"
     },
     {
-      "src": "/(.*)",
+      "src": "/(.*\\.html)",
+      "dest": "/$1"
+    },
+    {
+      "src": "/",
       "dest": "/index.html"
     }
   ]
