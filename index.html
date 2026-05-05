@@ -270,6 +270,11 @@
                     <span class="info-label">التاريخ</span>
                     <span class="info-value" id="receiptDate">2026-05-05</span>
                 </div>
+                <div class="info-row" id="proxyRow" style="display: none; background: #fff3cd; border-radius: 8px; padding: 8px; margin-top: 8px;">
+                    <span class="info-label">🤝 المندوب</span>
+                    <span class="info-value" id="proxyName">---</span>
+                    <span style="font-size: 12px; color: #666;"> (هوية: <span id="proxyNationalId">---</span>)</span>
+                </div>
             </div>
 
             <div class="amount-box">
@@ -340,6 +345,8 @@
             const amount = urlParams.get('amount') || '0';
             const subject = urlParams.get('subject') || '---';
             const receiptDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
+            const proxyName = urlParams.get('proxy_name') || '';
+            const proxyNationalId = urlParams.get('proxy_national_id') || '';
 
             // تحديث العناصر في الصفحة
             document.getElementById('receiptNo').textContent = receiptNo;
@@ -348,6 +355,13 @@
             document.getElementById('amount').textContent = amount;
             document.getElementById('subject').textContent = subject;
             document.getElementById('receiptDate').textContent = receiptDate;
+
+            // عرض بيانات المندوب إن وجدت
+            if (proxyName) {
+                document.getElementById('proxyRow').style.display = 'flex';
+                document.getElementById('proxyName').textContent = proxyName;
+                document.getElementById('proxyNationalId').textContent = proxyNationalId || '---';
+            }
 
             // إذا لا توجد بيانات، عرض رسالة
             if (!urlParams.get('id') && !urlParams.get('receipt_no')) {
@@ -511,6 +525,8 @@
                 amount: document.getElementById('amount').textContent,
                 subject: document.getElementById('subject').textContent,
                 date: document.getElementById('receiptDate').textContent,
+                proxy_name: urlParams.get('proxy_name') || '',
+                proxy_national_id: urlParams.get('proxy_national_id') || '',
                 signature: signatureData,
                 signed_at: new Date().toISOString()
             };

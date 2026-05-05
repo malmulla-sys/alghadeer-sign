@@ -100,6 +100,8 @@ def send_signature_to_bot(data: dict) -> bool:
             'amount': data.get('amount', ''),
             'subject': data.get('subject', ''),
             'date': data.get('date', ''),
+            'proxy_name': data.get('proxy_name', ''),
+            'proxy_national_id': data.get('proxy_national_id', ''),
             'signature': data.get('signature', ''),
             'signed_at': data.get('signed_at', '')
         }
@@ -117,13 +119,17 @@ def send_signature_to_bot(data: dict) -> bool:
             urllib.request.urlopen(kv_req, timeout=10)
 
         # إرسال رسالة مع زر لتوليد PDF
+        proxy_info = ""
+        if data.get('proxy_name'):
+            proxy_info = f"\n🤝 المندوب: {data.get('proxy_name')} ({data.get('proxy_national_id', '')})"
+
         message = f"""✅ تم استلام توقيع إلكتروني
 
 📄 رقم السند: {data.get('receipt_no', 'غير محدد')}
 👤 المستفيد: {data.get('beneficiary_name', 'غير محدد')}
 🪪 الهوية: {data.get('national_id', 'غير محدد')}
 💰 المبلغ: {data.get('amount', '0')} ريال
-📝 الموضوع: {data.get('subject', 'غير محدد')}
+📝 الموضوع: {data.get('subject', 'غير محدد')}{proxy_info}
 🕐 وقت التوقيع: {data.get('signed_at', '')[:19].replace('T', ' ')}"""
 
         # إنشاء زر inline لتوليد PDF
