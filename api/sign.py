@@ -116,7 +116,7 @@ def send_signature_to_bot(data: dict) -> bool:
             kv_req.add_header("Content-Type", "application/json")
             urllib.request.urlopen(kv_req, timeout=10)
 
-        # إرسال رسالة مع المفتاح
+        # إرسال رسالة مع زر لتوليد PDF
         message = f"""✅ تم استلام توقيع إلكتروني
 
 📄 رقم السند: {data.get('receipt_no', 'غير محدد')}
@@ -124,15 +124,22 @@ def send_signature_to_bot(data: dict) -> bool:
 🪪 الهوية: {data.get('national_id', 'غير محدد')}
 💰 المبلغ: {data.get('amount', '0')} ريال
 📝 الموضوع: {data.get('subject', 'غير محدد')}
-🕐 وقت التوقيع: {data.get('signed_at', '')[:19].replace('T', ' ')}
+🕐 وقت التوقيع: {data.get('signed_at', '')[:19].replace('T', ' ')}"""
 
-ESIGN_KEY:{sig_key}"""
+        # إنشاء زر inline لتوليد PDF
+        inline_keyboard = {
+            "inline_keyboard": [[
+                {"text": "📄 توليد سند PDF", "callback_data": f"esign_pdf:{sig_key}"}
+            ]]
+        }
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        msg_data = urllib.parse.urlencode({
+        payload = {
             'chat_id': ADMIN_CHAT_ID,
             'text': message,
-        }).encode()
+            'reply_markup': json.dumps(inline_keyboard)
+        }
+        msg_data = urllib.parse.urlencode(payload).encode()
 
         req = urllib.request.Request(url, data=msg_data)
         urllib.request.urlopen(req, timeout=10)
