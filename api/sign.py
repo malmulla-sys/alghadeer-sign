@@ -84,10 +84,10 @@ class handler(BaseHTTPRequestHandler):
 def send_signature_to_bot(data: dict) -> bool:
     """
     إرسال بيانات التوقيع للبوت عبر Telegram
-    البوت سيستقبل الرسالة ويولّد PDF محلياً
+    البوت سيستقبل الرسالة ويؤكد الاستلام
     """
     try:
-        # تحضير الرسالة بصيغة خاصة يفهمها البوت
+        # بيانات مختصرة (بدون صورة التوقيع الكبيرة)
         message_data = {
             'type': 'SIGNATURE_RECEIVED',
             'receipt_no': data.get('receipt_no', ''),
@@ -96,20 +96,20 @@ def send_signature_to_bot(data: dict) -> bool:
             'amount': data.get('amount', ''),
             'subject': data.get('subject', ''),
             'date': data.get('date', ''),
-            'signature': data.get('signature', ''),
             'signed_at': data.get('signed_at', '')
         }
 
-        # إرسال كرسالة نصية (البيانات مشفرة JSON)
+        # إرسال إشعار نصي مع البيانات المختصرة
         message = f"""✅ تم استلام توقيع إلكتروني
 
 📄 رقم السند: {data.get('receipt_no', 'غير محدد')}
 👤 المستفيد: {data.get('beneficiary_name', 'غير محدد')}
+🪪 الهوية: {data.get('national_id', 'غير محدد')}
 💰 المبلغ: {data.get('amount', '0')} ريال
 📝 الموضوع: {data.get('subject', 'غير محدد')}
 🕐 وقت التوقيع: {data.get('signed_at', '')[:19].replace('T', ' ')}
 
-⏳ جاري توليد السند الموقّع..."""
+✔️ تم تأكيد الاستلام تلقائياً"""
 
         # إرسال إشعار نصي
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -120,11 +120,10 @@ def send_signature_to_bot(data: dict) -> bool:
         }).encode()
 
         req = urllib.request.Request(url, data=msg_data)
-        response = urllib.request.urlopen(req, timeout=10)
+        urllib.request.urlopen(req, timeout=10)
 
-        # إرسال بيانات التوقيع الكاملة كملف (للمعالجة في البوت)
-        # نرسل JSON كرسالة منفصلة بعلامة خاصة
-        signature_msg = f"SIGNATURE_DATA:{json.dumps(message_data, ensure_ascii=False)}"
+        # إرسال بيانات مختصرة للبوت لتأكيد الاستلام
+        signature_msg = f"ESIGN_CONFIRM:{json.dumps(message_data, ensure_ascii=False)}"
 
         url2 = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         sig_data = urllib.parse.urlencode({
