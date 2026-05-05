@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>طلبات التوقيع المنتظرة</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: #fff;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .header img {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+
+        .header h1 {
+            color: #1e3a6e;
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .status-bar {
+            background: #fff;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: #374151;
+        }
+
+        .status-count {
+            background: #c62828;
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .status-count.zero {
+            background: #9ca3af;
+        }
+
+        .requests-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .request-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-right: 4px solid #c62828;
+        }
+
+        .request-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .request-card:active {
+            transform: scale(0.98);
+        }
+
+        .request-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .request-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1e3a6e;
+        }
+
+        .request-amount {
+            background: linear-gradient(135deg, #1e3a6e 0%, #2c5282 100%);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .request-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .request-detail {
+            background: #f3f4f6;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #4b5563;
+        }
+
+        .request-time {
+            font-size: 12px;
+            color: #9ca3af;
+            text-align: left;
+        }
+
+        .empty-state {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px 20px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-text {
+            color: #6b7280;
+            font-size: 16px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #fff;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #1e3a6e 0%, #2c5282 100%);
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+
+        .refresh-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .refresh-btn.spinning {
+            animation: spin 1s linear infinite;
+        }
+
+        .auto-refresh {
+            font-size: 11px;
+            color: rgba(255,255,255,0.7);
+            text-align: center;
+            margin-top: 16px;
+        }
+
+        .new-badge {
+            background: #c62828;
+            color: #fff;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* PIN Page Styles */
+        .pin-box {
+            background: #fff;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+
+        .pin-input {
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 16px;
+            outline: none;
+        }
+
+        .pin-input:focus {
+            border-color: #0d9488;
+        }
+
+        .pin-btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        .pin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(13, 148, 136, 0.4);
+        }
+
+        .pin-error {
+            color: #c62828;
+            margin-top: 12px;
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.9);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <!-- صفحة تسجيل الدخول -->
+    <div id="loginPage" class="container" style="display: none;">
+        <div class="header">
+            <img src="logo.png" alt="الغدير">
+            <h1>طلبات التوقيع</h1>
+            <p>سجّل دخولك للمتابعة</p>
+        </div>
+
+        <div class="pin-box">
+            <input type="text" id="usernameInput" class="pin-input" placeholder="اسم المستخدم" autocomplete="username">
+            <input type="password" id="passwordInput" class="pin-input" placeholder="كلمة المرور" autocomplete="current-password" onkeypress="if(event.key==='Enter')submitLogin()">
+            <button class="pin-btn" onclick="submitLogin()">دخول</button>
+            <p id="loginError" class="pin-error" style="display: none;">اسم المستخدم أو كلمة المرور غير صحيحة</p>
+        </div>
+    </div>
+
+    <!-- الصفحة الرئيسية -->
+    <div id="mainPage" class="container" style="display: none;">
+        <div class="header">
+            <img src="logo.png" alt="الغدير">
+            <h1>طلبات التوقيع المنتظرة</h1>
+            <p>اضغط على الطلب لفتح صفحة التوقيع</p>
+        </div>
+
+        <div class="status-bar">
+            <span class="status-text">مرحباً <span id="welcomeUser"></span></span>
+            <span class="status-count" id="requestCount">0</span>
+        </div>
+
+        <div id="loadingState" class="loading">
+            <div class="spinner"></div>
+            <p>جاري تحميل الطلبات...</p>
+        </div>
+
+        <div id="requestsList" class="requests-list" style="display: none;"></div>
+
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-icon">✅</div>
+            <p class="empty-text">لا توجد طلبات منتظرة</p>
+        </div>
+
+        <p class="auto-refresh">التحديث التلقائي كل 10 ثوانٍ</p>
+
+        <button class="logout-btn" onclick="logout()">🚪 خروج</button>
+    </div>
+
+    <button class="refresh-btn" id="refreshBtn" onclick="loadRequests()">🔄</button>
+
+    <script>
+        let lastRequestIds = new Set();
+        let authToken = '';
+        let currentUser = '';
+
+        // التحقق من تسجيل الدخول عند تحميل الصفحة
+        window.onload = function() {
+            const savedToken = localStorage.getItem('signature_auth_token');
+            const savedUser = localStorage.getItem('signature_user');
+
+            if (savedToken && savedUser) {
+                authToken = savedToken;
+                currentUser = savedUser;
+                verifyToken();
+            } else {
+                showLoginPage();
+            }
+        };
+
+        function showLoginPage() {
+            document.getElementById('loginPage').style.display = 'block';
+            document.getElementById('mainPage').style.display = 'none';
+        }
+
+        function showRequestsPage() {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('mainPage').style.display = 'block';
+            document.getElementById('welcomeUser').textContent = currentUser;
+            loadRequests();
+            // تحديث تلقائي كل 10 ثوانٍ
+            setInterval(loadRequests, 10000);
+        }
+
+        function submitLogin() {
+            const username = document.getElementById('usernameInput').value.trim();
+            const password = document.getElementById('passwordInput').value;
+
+            if (!username || !password) {
+                showLoginError('أدخل اسم المستخدم وكلمة المرور');
+                return;
+            }
+
+            verifyCredentials(username, password);
+        }
+
+        async function verifyCredentials(username, password) {
+            try {
+                const response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    authToken = data.token;
+                    currentUser = data.name || username;
+                    localStorage.setItem('signature_auth_token', authToken);
+                    localStorage.setItem('signature_user', currentUser);
+                    showRequestsPage();
+                } else {
+                    showLoginError(data.error || 'بيانات الدخول غير صحيحة');
+                }
+            } catch (error) {
+                showLoginError('خطأ في الاتصال بالخادم');
+            }
+        }
+
+        async function verifyToken() {
+            try {
+                const response = await fetch('/api/requests', {
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const data = await response.json();
+
+                if (data.error === 'unauthorized') {
+                    logout();
+                } else {
+                    showRequestsPage();
+                }
+            } catch (error) {
+                showRequestsPage(); // Try anyway
+            }
+        }
+
+        function showLoginError(message) {
+            const errorEl = document.getElementById('loginError');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            document.getElementById('passwordInput').value = '';
+        }
+
+        function logout() {
+            localStorage.removeItem('signature_auth_token');
+            localStorage.removeItem('signature_user');
+            authToken = '';
+            currentUser = '';
+            showLoginPage();
+        }
+
+        async function loadRequests() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            refreshBtn.classList.add('spinning');
+
+            try {
+                const response = await fetch('/api/requests', {
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const data = await response.json();
+
+                if (data.error === 'unauthorized') {
+                    logout();
+                    return;
+                }
+
+                displayRequests(data.requests || []);
+            } catch (error) {
+                console.error('Error loading requests:', error);
+            } finally {
+                refreshBtn.classList.remove('spinning');
+            }
+        }
+
+        function displayRequests(requests) {
+            const loadingState = document.getElementById('loadingState');
+            const requestsList = document.getElementById('requestsList');
+            const emptyState = document.getElementById('emptyState');
+            const requestCount = document.getElementById('requestCount');
+
+            loadingState.style.display = 'none';
+
+            if (requests.length === 0) {
+                requestsList.style.display = 'none';
+                emptyState.style.display = 'block';
+                requestCount.textContent = '0';
+                requestCount.classList.add('zero');
+            } else {
+                emptyState.style.display = 'none';
+                requestsList.style.display = 'flex';
+                requestCount.textContent = requests.length;
+                requestCount.classList.remove('zero');
+
+                // Check for new requests
+                const currentIds = new Set(requests.map(r => r.id));
+                const newRequests = requests.filter(r => !lastRequestIds.has(r.id));
+
+                if (newRequests.length > 0 && lastRequestIds.size > 0) {
+                    // Play notification sound for new requests
+                    playNotificationSound();
+                }
+                lastRequestIds = currentIds;
+
+                requestsList.innerHTML = requests.map((req, index) => {
+                    const isNew = newRequests.some(n => n.id === req.id) && lastRequestIds.size > 1;
+                    return `
+                        <div class="request-card" onclick="openSignature('${encodeURIComponent(JSON.stringify(req))}')">
+                            <div class="request-header">
+                                <span class="request-name">
+                                    ${isNew ? '<span class="new-badge">جديد</span>' : ''}
+                                    ${req.beneficiary_name}
+                                </span>
+                                <span class="request-amount">${req.amount} ريال</span>
+                            </div>
+                            <div class="request-details">
+                                <span class="request-detail">📄 ${req.receipt_no}</span>
+                                <span class="request-detail">🆔 ${req.national_id}</span>
+                            </div>
+                            <div class="request-details">
+                                <span class="request-detail">📝 ${req.subject}</span>
+                            </div>
+                            <div class="request-time">🕐 ${formatTime(req.created_at)}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function openSignature(encodedData) {
+            const data = JSON.parse(decodeURIComponent(encodedData));
+            const params = new URLSearchParams(data);
+            window.location.href = '/?' + params.toString();
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function playNotificationSound() {
+            // Simple beep using Web Audio API
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+                gainNode.gain.value = 0.3;
+
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.2);
+            } catch (e) {
+                console.log('Could not play notification sound');
+            }
+        }
+
+        // Initial load
+        loadRequests();
+
+        // Auto-refresh every 10 seconds
+        setInterval(loadRequests, 10000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "name": "alghadeer-sign",
+  "builds": [
+    {
+      "src": "api/*.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "requests.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "logo.png",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/sign",
+      "dest": "/api/sign.py"
+    },
+    {
+      "src": "/api/receipt",
+      "dest": "/api/receipt.py"
+    },
+    {
+      "src": "/api/requests",
+      "dest": "/api/requests.py"
+    },
+    {
+      "src": "/api/auth",
+      "dest": "/api/auth.py"
+    },
+    {
+      "src": "/requests",
+      "dest": "/requests.html"
+    },
+    {
+      "src": "/sign/(.*)",
+      "dest": "/index.html?id=$1"
+    },
+    {
+      "src": "/r/(.*)",
+      "dest": "/index.html?id=$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "TELEGRAM_BOT_TOKEN": "@telegram-bot-token",
+    "ADMIN_CHAT_ID": "@admin-chat-id",
+    "KV_REST_API_URL": "@kv-rest-api-url",
+    "KV_REST_API_TOKEN": "@kv-rest-api-token",
+    "SIGNATURE_SECRET": "@signature-secret",
+    "SIGNATURE_USERS": "@signature-users",
+    "SIGNATURE_BOT_API_KEY": "@signature-bot-api-key"
+  }
+}

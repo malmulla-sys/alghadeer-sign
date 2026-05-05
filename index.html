@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>توقيع سند الاستلام</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #134e4a 0%, #0d9488 100%);
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header img {
+            max-width: 240px;
+            height: auto;
+            background: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+
+        .receipt-info {
+            padding: 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed #e5e7eb;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .info-value {
+            color: #111827;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .amount-box {
+            background: linear-gradient(135deg, #1e3a6e 0%, #2c5282 100%);
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+            margin: 0 20px 20px;
+            border-radius: 12px;
+        }
+
+        .amount-label {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-bottom: 4px;
+        }
+
+        .amount-value {
+            font-size: 32px;
+            font-weight: 800;
+        }
+
+        .signature-section {
+            padding: 20px;
+        }
+
+        .signature-title {
+            text-align: center;
+            font-size: 14px;
+            color: #374151;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .signature-container {
+            border: 2px dashed #d1d5db;
+            border-radius: 12px;
+            background: #f9fafb;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #signatureCanvas {
+            display: block;
+            width: 100%;
+            height: 200px;
+            cursor: crosshair;
+            touch-action: none;
+            background: #fff;
+        }
+
+        .signature-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #9ca3af;
+            font-size: 16px;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .signature-hint.hidden {
+            opacity: 0;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            padding: 0 20px 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-clear {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-clear:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-confirm {
+            background: linear-gradient(135deg, #b71c1c 0%, #c62828 100%);
+            color: #fff;
+        }
+
+        .btn-confirm:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(183, 28, 28, 0.4);
+        }
+
+        .btn-confirm:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e5e7eb;
+            border-top-color: #0d9488;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            padding: 16px;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+        }
+
+        .debug-info {
+            background: #fef3c7;
+            padding: 10px;
+            margin: 10px 20px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <img src="logo.png" alt="شركة الغدير">
+                <h1>سند استلام</h1>
+            </div>
+
+            <div class="receipt-info">
+                <div class="info-row">
+                    <span class="info-label">رقم السند</span>
+                    <span class="info-value" id="receiptNo">2026-0512</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">اسم المستفيد</span>
+                    <span class="info-value" id="beneficiaryName">محمد أحمد العلي</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">رقم الهوية</span>
+                    <span class="info-value" id="nationalId">1234567890</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">الموضوع</span>
+                    <span class="info-value" id="subject">مساعدة شهر رمضان</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">التاريخ</span>
+                    <span class="info-value" id="receiptDate">2026-05-05</span>
+                </div>
+            </div>
+
+            <div class="amount-box">
+                <div class="amount-label">المبلغ المستلم</div>
+                <div class="amount-value" id="amount">2,500</div>
+                <div style="font-size: 14px; margin-top: 4px;">ريال سعودي</div>
+            </div>
+
+            <div class="signature-section">
+                <div class="signature-title">وقّع في المربع أدناه بالفأرة أو الإصبع</div>
+                <div class="signature-container">
+                    <canvas id="signatureCanvas"></canvas>
+                    <div class="signature-hint" id="signatureHint">✍️ ابدأ التوقيع هنا</div>
+                </div>
+            </div>
+
+            <div id="debugInfo" class="debug-info" style="display:none;"></div>
+
+            <div class="buttons" id="buttonsSection">
+                <button class="btn btn-clear" onclick="clearSignature()">🔄 مسح</button>
+                <button class="btn btn-confirm" id="confirmBtn" onclick="submitSignature()" disabled>✅ تأكيد التوقيع</button>
+            </div>
+
+            <div class="loading" id="submitLoading">
+                <div class="spinner"></div>
+                <p>جاري حفظ التوقيع...</p>
+            </div>
+
+            <div class="status" id="successStatus">
+                <div class="status-icon">✅</div>
+                <h3 style="color: #059669; margin-bottom: 8px;">تم التوقيع بنجاح</h3>
+                <p style="color: #6b7280; font-size: 14px;">شكراً لك، تم حفظ السند</p>
+            </div>
+
+            <div class="status" id="errorStatus">
+                <div class="status-icon">❌</div>
+                <h3 style="color: #dc2626; margin-bottom: 8px;">حدث خطأ</h3>
+                <p style="color: #6b7280; font-size: 14px;" id="errorMessage">يرجى المحاولة مرة أخرى</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            نظام التوقيع الإلكتروني
+        </div>
+    </div>
+
+    <script>
+        // Variables
+        let canvas, ctx;
+        let isDrawing = false;
+        let hasSignature = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        // Initialize when page loads
+        window.onload = function() {
+            setupCanvas();
+            loadReceiptData();
+        };
+
+        function loadReceiptData() {
+            // قراءة البيانات من URL
+            const urlParams = new URLSearchParams(window.location.search);
+
+            const receiptNo = urlParams.get('receipt_no') || '---';
+            const beneficiaryName = urlParams.get('beneficiary_name') || '---';
+            const nationalId = urlParams.get('national_id') || '---';
+            const amount = urlParams.get('amount') || '0';
+            const subject = urlParams.get('subject') || '---';
+            const receiptDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
+
+            // تحديث العناصر في الصفحة
+            document.getElementById('receiptNo').textContent = receiptNo;
+            document.getElementById('beneficiaryName').textContent = beneficiaryName;
+            document.getElementById('nationalId').textContent = nationalId;
+            document.getElementById('amount').textContent = amount;
+            document.getElementById('subject').textContent = subject;
+            document.getElementById('receiptDate').textContent = receiptDate;
+
+            // إذا لا توجد بيانات، عرض رسالة
+            if (!urlParams.get('id') && !urlParams.get('receipt_no')) {
+                console.log('No receipt data in URL - using demo data');
+            }
+        }
+
+        function setupCanvas() {
+            canvas = document.getElementById('signatureCanvas');
+            ctx = canvas.getContext('2d');
+
+            // Set actual canvas size (not CSS size)
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+
+            // Set canvas dimensions
+            canvas.width = rect.width;
+            canvas.height = 200;
+
+            // Setup drawing style
+            ctx.strokeStyle = '#1e3a5f';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Fill with white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Mouse Events
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', drawing);
+            canvas.addEventListener('mouseup', stopDraw);
+            canvas.addEventListener('mouseleave', stopDraw);
+
+            // Touch Events
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', stopDraw);
+
+            console.log('Canvas initialized:', canvas.width, 'x', canvas.height);
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        function getTouchPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            return {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
+        }
+
+        function startDraw(e) {
+            isDrawing = true;
+            const pos = getMousePos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+
+            // Start path
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+
+            // Hide hint and enable button
+            if (!hasSignature) {
+                hasSignature = true;
+                document.getElementById('signatureHint').classList.add('hidden');
+                document.getElementById('confirmBtn').disabled = false;
+            }
+        }
+
+        function drawing(e) {
+            if (!isDrawing) return;
+
+            e.preventDefault();
+            const pos = getMousePos(e);
+
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function stopDraw() {
+            if (isDrawing) {
+                isDrawing = false;
+                ctx.beginPath();
+            }
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            isDrawing = true;
+            const pos = getTouchPos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+
+            if (!hasSignature) {
+                hasSignature = true;
+                document.getElementById('signatureHint').classList.add('hidden');
+                document.getElementById('confirmBtn').disabled = false;
+            }
+        }
+
+        function handleTouchMove(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+
+            const pos = getTouchPos(e);
+
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function clearSignature() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            hasSignature = false;
+            document.getElementById('signatureHint').classList.remove('hidden');
+            document.getElementById('confirmBtn').disabled = true;
+        }
+
+        function submitSignature() {
+            if (!hasSignature) {
+                alert('يرجى التوقيع أولاً');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('buttonsSection').style.display = 'none';
+            document.getElementById('submitLoading').classList.add('show');
+
+            // Get signature as image
+            const signatureData = canvas.toDataURL('image/png');
+
+            // Get receipt data from URL or page
+            const urlParams = new URLSearchParams(window.location.search);
+            const receiptData = {
+                receipt_id: urlParams.get('id') || '',
+                receipt_no: document.getElementById('receiptNo').textContent,
+                beneficiary_name: document.getElementById('beneficiaryName').textContent,
+                national_id: document.getElementById('nationalId').textContent,
+                amount: document.getElementById('amount').textContent,
+                subject: document.getElementById('subject').textContent,
+                date: document.getElementById('receiptDate').textContent,
+                signature: signatureData,
+                signed_at: new Date().toISOString()
+            };
+
+            // Send to API
+            fetch('/api/sign', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(receiptData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('submitLoading').classList.remove('show');
+                if (data.success) {
+                    document.getElementById('successStatus').classList.add('show');
+                    document.querySelector('.signature-section').style.opacity = '0.5';
+                    document.querySelector('.signature-section').style.pointerEvents = 'none';
+                } else {
+                    document.getElementById('errorMessage').textContent = data.error || 'حدث خطأ';
+                    document.getElementById('errorStatus').classList.add('show');
+                    document.getElementById('buttonsSection').style.display = 'flex';
+                }
+            })
+            .catch(error => {
+                document.getElementById('submitLoading').classList.remove('show');
+                document.getElementById('errorMessage').textContent = 'فشل الاتصال بالخادم';
+                document.getElementById('errorStatus').classList.add('show');
+                document.getElementById('buttonsSection').style.display = 'flex';
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
