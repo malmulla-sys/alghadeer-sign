@@ -53,13 +53,4 @@
       "dest": "/index.html"
     }
   ],
-  "env": {
-    "TELEGRAM_BOT_TOKEN": "@telegram-bot-token",
-    "ADMIN_CHAT_ID": "@admin-chat-id",
-    "KV_REST_API_URL": "@kv-rest-api-url",
-    "KV_REST_API_TOKEN": "@kv-rest-api-token",
-    "SIGNATURE_SECRET": "@signature-secret",
-    "SIGNATURE_USERS": "@signature-users",
-    "SIGNATURE_BOT_API_KEY": "@signature-bot-api-key"
-  }
 }
