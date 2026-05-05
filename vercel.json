@@ -37,6 +37,10 @@
       "dest": "/api/auth.py"
     },
     {
+      "src": "/api/get_signature",
+      "dest": "/api/get_signature.py"
+    },
+    {
       "src": "/requests",
       "dest": "/requests.html"
     },

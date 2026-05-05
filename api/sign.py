@@ -83,12 +83,14 @@ class handler(BaseHTTPRequestHandler):
 
 def send_signature_to_bot(data: dict) -> bool:
     """
-    إرسال بيانات التوقيع للبوت عبر Telegram كملف JSON
-    البوت سيستقبل الملف ويولّد PDF بالتوقيع
+    حفظ بيانات التوقيع في KV وإرسال مفتاح للبوت
     """
-    import io
+    import uuid
 
     try:
+        # توليد مفتاح فريد
+        sig_key = f"sig_{uuid.uuid4().hex[:12]}"
+
         # بيانات كاملة مع صورة التوقيع
         message_data = {
             'type': 'SIGNATURE_RECEIVED',
@@ -102,7 +104,19 @@ def send_signature_to_bot(data: dict) -> bool:
             'signed_at': data.get('signed_at', '')
         }
 
-        # إرسال إشعار نصي أولاً
+        # حفظ في KV
+        KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
+        KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN', '')
+
+        if KV_REST_API_URL and KV_REST_API_TOKEN:
+            kv_url = f"{KV_REST_API_URL}/set/{sig_key}"
+            kv_data = json.dumps(message_data).encode('utf-8')
+            kv_req = urllib.request.Request(kv_url, data=kv_data, method='POST')
+            kv_req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+            kv_req.add_header("Content-Type", "application/json")
+            urllib.request.urlopen(kv_req, timeout=10)
+
+        # إرسال رسالة مع المفتاح
         message = f"""✅ تم استلام توقيع إلكتروني
 
 📄 رقم السند: {data.get('receipt_no', 'غير محدد')}
@@ -112,7 +126,7 @@ def send_signature_to_bot(data: dict) -> bool:
 📝 الموضوع: {data.get('subject', 'غير محدد')}
 🕐 وقت التوقيع: {data.get('signed_at', '')[:19].replace('T', ' ')}
 
-⏳ جاري توليد السند الموقّع..."""
+ESIGN_KEY:{sig_key}"""
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         msg_data = urllib.parse.urlencode({
@@ -122,38 +136,6 @@ def send_signature_to_bot(data: dict) -> bool:
 
         req = urllib.request.Request(url, data=msg_data)
         urllib.request.urlopen(req, timeout=10)
-
-        # إرسال بيانات التوقيع كملف JSON
-        json_content = json.dumps(message_data, ensure_ascii=False).encode('utf-8')
-
-        # استخدام multipart/form-data لإرسال الملف
-        boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
-
-        body = []
-        body.append(f'--{boundary}'.encode())
-        body.append(b'Content-Disposition: form-data; name="chat_id"')
-        body.append(b'')
-        body.append(ADMIN_CHAT_ID.encode())
-
-        body.append(f'--{boundary}'.encode())
-        body.append(b'Content-Disposition: form-data; name="document"; filename="esign_data.json"')
-        body.append(b'Content-Type: application/json')
-        body.append(b'')
-        body.append(json_content)
-
-        body.append(f'--{boundary}'.encode())
-        body.append(b'Content-Disposition: form-data; name="caption"')
-        body.append(b'')
-        body.append('ESIGN_FILE'.encode())
-
-        body.append(f'--{boundary}--'.encode())
-
-        body_bytes = b'\r\n'.join(body)
-
-        url2 = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
-        req2 = urllib.request.Request(url2, data=body_bytes)
-        req2.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
-        urllib.request.urlopen(req2, timeout=30)
 
         return True
 
