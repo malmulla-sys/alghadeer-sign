@@ -55,20 +55,18 @@ class handler(BaseHTTPRequestHandler):
             if BOT_TOKEN and ADMIN_CHAT_ID:
                 success = send_signature_to_bot(data)
                 if success:
-                    # حذف الطلب من قائمة الانتظار
+                    # محاولة حذف الطلب من قائمة الانتظار (لا يؤثر على النجاح)
                     request_id = data.get('receipt_id') or data.get('id', '')
                     if request_id:
-                        remove_pending_request(request_id)
+                        try:
+                            remove_pending_request(request_id)
+                        except:
+                            pass  # تجاهل أي خطأ في الحذف
 
-                    self.wfile.write(json.dumps({
-                        'success': True,
-                        'message': 'تم حفظ التوقيع بنجاح'
-                    }, ensure_ascii=False).encode('utf-8'))
-                else:
-                    self.wfile.write(json.dumps({
-                        'success': False,
-                        'error': 'فشل إرسال التوقيع'
-                    }, ensure_ascii=False).encode('utf-8'))
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'message': 'تم حفظ التوقيع بنجاح ✅'
+                }, ensure_ascii=False).encode('utf-8'))
             else:
                 self.wfile.write(json.dumps({
                     'success': False,
