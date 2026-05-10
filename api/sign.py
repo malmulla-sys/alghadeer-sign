@@ -51,27 +51,29 @@ class handler(BaseHTTPRequestHandler):
                 }, ensure_ascii=False).encode('utf-8'))
                 return
 
-            # إرسال البيانات للبوت عبر Telegram
-            if BOT_TOKEN and ADMIN_CHAT_ID:
-                success = send_signature_to_bot(data)
-                if success:
-                    # محاولة حذف الطلب من قائمة الانتظار (لا يؤثر على النجاح)
-                    request_id = data.get('receipt_id') or data.get('id', '')
-                    if request_id:
-                        try:
-                            remove_pending_request(request_id)
-                        except:
-                            pass  # تجاهل أي خطأ في الحذف
+            # حفظ التوقيع المؤكد في KV ليجلبه البوت
+            save_success = save_confirmed_signature(data)
 
-                self.wfile.write(json.dumps({
-                    'success': True,
-                    'message': 'تم حفظ التوقيع بنجاح ✅'
-                }, ensure_ascii=False).encode('utf-8'))
-            else:
-                self.wfile.write(json.dumps({
-                    'success': False,
-                    'error': 'إعدادات البوت غير مكتملة'
-                }, ensure_ascii=False).encode('utf-8'))
+            # حذف الطلب من قائمة الانتظار
+            request_id = data.get('receipt_id') or data.get('id', '')
+            if request_id:
+                try:
+                    remove_pending_request(request_id)
+                except:
+                    pass
+
+            # إرسال إشعار للبوت (اختياري - قد لا يعمل)
+            if BOT_TOKEN and ADMIN_CHAT_ID:
+                try:
+                    send_signature_to_bot(data)
+                except:
+                    pass  # تجاهل أي خطأ في الإرسال
+
+            self.wfile.write(json.dumps({
+                'success': True,
+                'message': 'تم حفظ التوقيع بنجاح ✅',
+                'saved_to_kv': save_success
+            }, ensure_ascii=False).encode('utf-8'))
 
         except Exception as e:
             self.send_response(500)
@@ -122,6 +124,54 @@ def send_signature_to_bot(data: dict) -> bool:
 
     except Exception as e:
         print(f"Failed to send to bot: {e}")
+        return False
+
+
+def save_confirmed_signature(data: dict) -> bool:
+    """حفظ التوقيع المؤكد في KV ليجلبه البوت"""
+    KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
+    KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN', '')
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return False
+
+    try:
+        # جلب التوقيعات المؤكدة الحالية
+        url = f"{KV_REST_API_URL}/get/confirmed_signatures"
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                result_data = json.loads(resp.read().decode())
+                result = result_data.get("result")
+                signatures = json.loads(result) if result else []
+        except:
+            signatures = []
+
+        # إضافة التوقيع الجديد (بدون صورة التوقيع لتوفير المساحة)
+        confirm_data = {
+            'receipt_no': data.get('receipt_no', ''),
+            'beneficiary_name': data.get('beneficiary_name', ''),
+            'national_id': data.get('national_id', ''),
+            'amount': data.get('amount', ''),
+            'subject': data.get('subject', ''),
+            'date': data.get('date', ''),
+            'signed_at': data.get('signed_at', ''),
+            'id': data.get('id') or data.get('receipt_id', '')
+        }
+        signatures.append(confirm_data)
+
+        # حفظ
+        save_url = f"{KV_REST_API_URL}/set/confirmed_signatures"
+        save_data = json.dumps(signatures).encode()
+        save_req = urllib.request.Request(save_url, data=save_data, method='POST')
+        save_req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+        save_req.add_header("Content-Type", "application/json")
+        urllib.request.urlopen(save_req, timeout=5)
+
+        return True
+    except Exception as e:
+        print(f"Failed to save confirmed signature: {e}")
         return False
 
 

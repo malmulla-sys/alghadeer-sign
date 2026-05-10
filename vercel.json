@@ -45,6 +45,10 @@
       "dest": "/api/check_env.py"
     },
     {
+      "src": "/api/confirmed",
+      "dest": "/api/confirmed.py"
+    },
+    {
       "src": "/requests",
       "dest": "/requests.html"
     },
