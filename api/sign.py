@@ -86,32 +86,37 @@ def send_signature_to_bot(data: dict) -> bool:
     إرسال بيانات التوقيع مباشرة للبوت لتوليد PDF تلقائي
     """
     try:
-        # بيانات كاملة مع صورة التوقيع
-        message_data = {
+        # بيانات بدون صورة التوقيع (لتجنب تجاوز حد الرسالة)
+        # سنرسل تأكيد بسيط أولاً
+        confirm_data = {
             'receipt_no': data.get('receipt_no', ''),
             'beneficiary_name': data.get('beneficiary_name', ''),
             'national_id': data.get('national_id', ''),
             'amount': data.get('amount', ''),
             'subject': data.get('subject', ''),
             'date': data.get('date', ''),
-            'proxy_name': data.get('proxy_name', ''),
-            'proxy_national_id': data.get('proxy_national_id', ''),
-            'signature': data.get('signature', ''),
             'signed_at': data.get('signed_at', '')
         }
 
-        # إرسال البيانات مباشرة للبوت (يولّد PDF تلقائياً)
-        message = f"SIGNATURE_DATA:{json.dumps(message_data, ensure_ascii=False)}"
+        # إرسال تأكيد بسيط (بدون صورة التوقيع لتجنب تجاوز الحد)
+        message = f"ESIGN_CONFIRM:{json.dumps(confirm_data, ensure_ascii=False)}"
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
+
+        # استخدام JSON بدلاً من urlencode للتعامل الأفضل مع العربية
+        headers = {'Content-Type': 'application/json'}
+        payload = json.dumps({
             'chat_id': ADMIN_CHAT_ID,
             'text': message
-        }
-        msg_data = urllib.parse.urlencode(payload).encode()
+        }).encode('utf-8')
 
-        req = urllib.request.Request(url, data=msg_data)
-        urllib.request.urlopen(req, timeout=10)
+        req = urllib.request.Request(url, data=payload, headers=headers)
+        response = urllib.request.urlopen(req, timeout=10)
+        result = json.loads(response.read().decode())
+
+        if not result.get('ok'):
+            print(f"Telegram API error: {result}")
+            return False
 
         return True
 
