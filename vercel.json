@@ -41,6 +41,10 @@
       "dest": "/api/get_signature.py"
     },
     {
+      "src": "/api/check_env",
+      "dest": "/api/check_env.py"
+    },
+    {
       "src": "/requests",
       "dest": "/requests.html"
     },
