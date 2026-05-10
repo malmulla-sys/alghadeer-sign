@@ -528,7 +528,7 @@
                 proxy_name: urlParams.get('proxy_name') || '',
                 proxy_national_id: urlParams.get('proxy_national_id') || '',
                 signature: signatureData,
-                signed_at: new Date().toISOString()
+                signed_at: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Riyadh' }).replace(' ', 'T')
             };
 
             // Send to API
