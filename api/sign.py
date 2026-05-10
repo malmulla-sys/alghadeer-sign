@@ -148,7 +148,7 @@ def save_confirmed_signature(data: dict) -> bool:
         except:
             signatures = []
 
-        # إضافة التوقيع الجديد (بدون صورة التوقيع لتوفير المساحة)
+        # إضافة التوقيع الجديد (مع صورة التوقيع لتوليد PDF)
         confirm_data = {
             'receipt_no': data.get('receipt_no', ''),
             'beneficiary_name': data.get('beneficiary_name', ''),
@@ -157,7 +157,10 @@ def save_confirmed_signature(data: dict) -> bool:
             'subject': data.get('subject', ''),
             'date': data.get('date', ''),
             'signed_at': data.get('signed_at', ''),
-            'id': data.get('id') or data.get('receipt_id', '')
+            'id': data.get('id') or data.get('receipt_id', ''),
+            'signature': data.get('signature', ''),
+            'proxy_name': data.get('proxy_name', ''),
+            'proxy_national_id': data.get('proxy_national_id', '')
         }
         signatures.append(confirm_data)
 
