@@ -642,6 +642,7 @@
                         <span class="history-badge">✅ مكتمل</span>
                         <span class="receipt-no">#${item.receipt_no || "---"}</span>
                         <span class="time">${formatTime(item.signed_at)}</span>
+                        ${currentRole === 'admin' ? `<button class="delete-btn" onclick="event.stopPropagation(); deleteHistory('${item.id}', '${item.beneficiary_name}')">🗑️</button>` : ''}
                     </div>
                     <div class="card-body">
                         <div class="beneficiary-name">${item.beneficiary_name}</div>
@@ -757,6 +758,29 @@
                     loadRequests();
                 } else {
                     alert('فشل في حذف الطلب: ' + (result.message || 'خطأ غير معروف'));
+                }
+            } catch (error) {
+                alert('خطأ في الاتصال: ' + error.message);
+            }
+        }
+
+        async function deleteHistory(entryId, beneficiaryName) {
+            if (!confirm(`هل تريد حذف سجل التوقيع لـ "${beneficiaryName}"؟`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/history?id=${entryId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    historyLoaded = false;
+                    loadHistory();
+                } else {
+                    alert('فشل في حذف السجل: ' + (result.message || 'خطأ غير معروف'));
                 }
             } catch (error) {
                 alert('خطأ في الاتصال: ' + error.message);

@@ -68,11 +68,40 @@ def _kv_get_history() -> list:
         return []
 
 
+def _kv_save_history(history: list) -> bool:
+    """Save history to KV"""
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return False
+
+    import urllib.request
+    try:
+        url = f"{KV_REST_API_URL}/set/signature_history"
+        data = json.dumps(history).encode()
+        req = urllib.request.Request(url, data=data, method='POST')
+        req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except Exception as e:
+        print(f"KV save history error: {e}")
+        return False
+
+
+def _get_user_role(username: str) -> str:
+    """Get user role from SIGNATURE_USERS"""
+    users_raw = os.environ.get('SIGNATURE_USERS', '')
+    for user_str in users_raw.split(','):
+        parts = user_str.strip().split(':')
+        if len(parts) >= 1 and parts[0].strip().lower() == username.lower():
+            return parts[3].strip().lower() if len(parts) > 3 else 'user'
+    return 'user'
+
+
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         self.end_headers()
 
@@ -106,3 +135,62 @@ class handler(BaseHTTPRequestHandler):
             'history': history
         }
         self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
+
+    def do_DELETE(self):
+        """Delete a history entry (admin only)"""
+        import urllib.parse
+
+        auth_header = self.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+        valid, username = _verify_token(token)
+        if not valid:
+            self.send_response(401)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'success': False,
+                'error': 'unauthorized'
+            }).encode('utf-8'))
+            return
+
+        # Check if admin
+        role = _get_user_role(username)
+        if role != 'admin':
+            self.send_response(403)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'success': False,
+                'error': 'admin_only'
+            }).encode('utf-8'))
+            return
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+
+        # Get entry id from query string
+        query = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(query)
+        entry_id = params.get('id', [''])[0]
+
+        if not entry_id:
+            self.wfile.write(json.dumps({
+                'success': False,
+                'error': 'Missing entry id'
+            }).encode('utf-8'))
+            return
+
+        # Remove from history
+        history = _kv_get_history()
+        history = [h for h in history if h.get('id') != entry_id]
+        success = _kv_save_history(history)
+
+        self.wfile.write(json.dumps({
+            'success': success,
+            'message': 'تم حذف السجل' if success else 'فشل في الحذف'
+        }, ensure_ascii=False).encode('utf-8'))
