@@ -6,9 +6,12 @@ import json
 import os
 import hashlib
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler
 import urllib.parse
+
+# توقيت الرياض (UTC+3)
+RIYADH_TZ = timezone(timedelta(hours=3))
 
 # Vercel KV (Upstash Redis) credentials
 KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
@@ -109,8 +112,8 @@ def _add_request(request_data: dict) -> bool:
     # Remove if already exists (same id)
     requests = [r for r in requests if r.get('id') != request_data.get('id')]
 
-    # Add new request
-    request_data['created_at'] = datetime.now().isoformat()
+    # Add new request (بتوقيت الرياض)
+    request_data['created_at'] = datetime.now(RIYADH_TZ).isoformat()
     requests.append(request_data)
 
     return _kv_save_all(requests)
