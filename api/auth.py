@@ -9,8 +9,9 @@ import time
 from http.server import BaseHTTPRequestHandler
 
 # المستخدمين المصرح لهم (من متغيرات البيئة)
-# الصيغة: username:password:display_name,username2:password2:display_name2
-USERS_RAW = os.environ.get('SIGNATURE_USERS', 'bilal:1234:بلال,duraihim:5678:الدريهم')
+# الصيغة: username:password:display_name:role
+# role = admin (صلاحية حذف) أو user (بدون حذف)
+USERS_RAW = os.environ.get('SIGNATURE_USERS', 'bilal:1234:بلال:admin,duraihim:5678:الدريهم:user')
 
 def get_users() -> dict:
     """تحميل المستخدمين من متغير البيئة"""
@@ -21,9 +22,11 @@ def get_users() -> dict:
             username = parts[0].strip().lower()
             password = parts[1].strip()
             display_name = parts[2].strip() if len(parts) > 2 else username
+            role = parts[3].strip().lower() if len(parts) > 3 else 'user'
             users[username] = {
                 'password': password,
-                'name': display_name
+                'name': display_name,
+                'role': role
             }
     return users
 
@@ -113,6 +116,7 @@ class handler(BaseHTTPRequestHandler):
                 'success': True,
                 'token': token,
                 'name': users[username]['name'],
+                'role': users[username]['role'],
                 'message': 'تم تسجيل الدخول بنجاح'
             }, ensure_ascii=False).encode('utf-8'))
 

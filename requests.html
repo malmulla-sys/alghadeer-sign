@@ -361,15 +361,18 @@
         let lastRequestIds = new Set();
         let authToken = '';
         let currentUser = '';
+        let currentRole = 'user';
 
         // التحقق من تسجيل الدخول عند تحميل الصفحة
         window.onload = function() {
             const savedToken = localStorage.getItem('signature_auth_token');
             const savedUser = localStorage.getItem('signature_user');
+            const savedRole = localStorage.getItem('signature_role');
 
             if (savedToken && savedUser) {
                 authToken = savedToken;
                 currentUser = savedUser;
+                currentRole = savedRole || 'user';
                 verifyToken();
             } else {
                 showLoginPage();
@@ -414,8 +417,10 @@
                 if (data.success) {
                     authToken = data.token;
                     currentUser = data.name || username;
+                    currentRole = data.role || 'user';
                     localStorage.setItem('signature_auth_token', authToken);
                     localStorage.setItem('signature_user', currentUser);
+                    localStorage.setItem('signature_role', currentRole);
                     showRequestsPage();
                 } else {
                     showLoginError(data.error || 'بيانات الدخول غير صحيحة');
@@ -452,8 +457,10 @@
         function logout() {
             localStorage.removeItem('signature_auth_token');
             localStorage.removeItem('signature_user');
+            localStorage.removeItem('signature_role');
             authToken = '';
             currentUser = '';
+            currentRole = 'user';
             showLoginPage();
         }
 
@@ -528,7 +535,7 @@
                                 <span class="request-detail">📝 ${req.subject}</span>
                             </div>
                             <div class="request-time">🕐 ${formatTime(req.created_at)}</div>
-                            <button class="delete-btn" onclick="event.stopPropagation(); deleteRequest('${req.id}', '${req.beneficiary_name}')">🗑️ حذف</button>
+                            ${currentRole === 'admin' ? `<button class="delete-btn" onclick="event.stopPropagation(); deleteRequest('${req.id}', '${req.beneficiary_name}')">🗑️ حذف</button>` : ''}
                         </div>
                     `;
                 }).join('');
