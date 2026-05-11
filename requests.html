@@ -288,6 +288,24 @@
             box-shadow: 0 4px 12px rgba(13, 148, 136, 0.4);
         }
 
+        .remember-me {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 12px 0;
+            cursor: pointer;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .remember-me input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #0d9488;
+            cursor: pointer;
+        }
+
         .pin-error {
             color: #c62828;
             margin-top: 12px;
@@ -320,6 +338,10 @@
         <div class="pin-box">
             <input type="text" id="usernameInput" class="pin-input" placeholder="اسم المستخدم" autocomplete="username">
             <input type="password" id="passwordInput" class="pin-input" placeholder="كلمة المرور" autocomplete="current-password" onkeypress="if(event.key==='Enter')submitLogin()">
+            <label class="remember-me">
+                <input type="checkbox" id="rememberMe" checked>
+                <span>تذكرني</span>
+            </label>
             <button class="pin-btn" onclick="submitLogin()">دخول</button>
             <p id="loginError" class="pin-error" style="display: none;">اسم المستخدم أو كلمة المرور غير صحيحة</p>
         </div>
@@ -365,9 +387,10 @@
 
         // التحقق من تسجيل الدخول عند تحميل الصفحة
         window.onload = function() {
-            const savedToken = localStorage.getItem('signature_auth_token');
-            const savedUser = localStorage.getItem('signature_user');
-            const savedRole = localStorage.getItem('signature_role');
+            // Check localStorage first, then sessionStorage
+            const savedToken = localStorage.getItem('signature_auth_token') || sessionStorage.getItem('signature_auth_token');
+            const savedUser = localStorage.getItem('signature_user') || sessionStorage.getItem('signature_user');
+            const savedRole = localStorage.getItem('signature_role') || sessionStorage.getItem('signature_role');
 
             if (savedToken && savedUser) {
                 authToken = savedToken;
@@ -418,9 +441,23 @@
                     authToken = data.token;
                     currentUser = data.name || username;
                     currentRole = data.role || 'user';
-                    localStorage.setItem('signature_auth_token', authToken);
-                    localStorage.setItem('signature_user', currentUser);
-                    localStorage.setItem('signature_role', currentRole);
+                    
+                    // Check if "Remember me" is checked
+                    const rememberMe = document.getElementById('rememberMe').checked;
+                    const storage = rememberMe ? localStorage : sessionStorage;
+                    
+                    // Clear both storages first
+                    localStorage.removeItem('signature_auth_token');
+                    localStorage.removeItem('signature_user');
+                    localStorage.removeItem('signature_role');
+                    sessionStorage.removeItem('signature_auth_token');
+                    sessionStorage.removeItem('signature_user');
+                    sessionStorage.removeItem('signature_role');
+                    
+                    // Save to selected storage
+                    storage.setItem('signature_auth_token', authToken);
+                    storage.setItem('signature_user', currentUser);
+                    storage.setItem('signature_role', currentRole);
                     showRequestsPage();
                 } else {
                     showLoginError(data.error || 'بيانات الدخول غير صحيحة');
@@ -455,9 +492,13 @@
         }
 
         function logout() {
+            // Clear both storages
             localStorage.removeItem('signature_auth_token');
             localStorage.removeItem('signature_user');
             localStorage.removeItem('signature_role');
+            sessionStorage.removeItem('signature_auth_token');
+            sessionStorage.removeItem('signature_user');
+            sessionStorage.removeItem('signature_role');
             authToken = '';
             currentUser = '';
             currentRole = 'user';
