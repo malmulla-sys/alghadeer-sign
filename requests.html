@@ -527,7 +527,11 @@
         function formatTime(timestamp) {
             if (!timestamp) return '';
             const date = new Date(timestamp);
-            return date.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+            return date.toLocaleTimeString('ar-SA', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Asia/Riyadh'
+            });
         }
 
         function playNotificationSound() {
