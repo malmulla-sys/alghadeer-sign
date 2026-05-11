@@ -402,7 +402,7 @@
             <span class="status-count" id="requestCount">0</span>
         </div>
 
-        <div class="tabs">
+        <div class="tabs" id="tabsContainer" style="display: none;">
             <button class="tab-btn active" id="tabPending" onclick="switchTab('pending')">⏳ الطلبات المنتظرة</button>
             <button class="tab-btn" id="tabHistory" onclick="switchTab('history')">✅ سجل التوقيعات</button>
         </div>
@@ -469,6 +469,12 @@
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainPage').style.display = 'block';
             document.getElementById('welcomeUser').textContent = currentUser;
+            
+            // إظهار التبويبات للأدمن فقط
+            if (currentRole === 'admin') {
+                document.getElementById('tabsContainer').style.display = 'flex';
+            }
+            
             loadRequests();
             // تحديث تلقائي كل 10 ثوانٍ
             setInterval(loadRequests, 10000);
