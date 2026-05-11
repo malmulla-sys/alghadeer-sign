@@ -630,23 +630,23 @@
                 return;
             }
 
-            historyList.innerHTML = history.map(item => 
+            historyList.innerHTML = history.map(item => `
                 <div class="request-card history-item">
                     <div class="card-header">
                         <span class="history-badge">✅ مكتمل</span>
-                        <span class="receipt-no">#+''+</span>
-                        <span class="time">+''+</span>
+                        <span class="receipt-no">#${item.receipt_no || "---"}</span>
+                        <span class="time">${formatTime(item.signed_at)}</span>
                     </div>
                     <div class="card-body">
-                        <div class="beneficiary-name">+''+</div>
+                        <div class="beneficiary-name">${item.beneficiary_name}</div>
                         <div class="details">
-                            <span>🪪 +''+</span>
-                            <span class="amount">💰 +''+ ريال</span>
+                            <span>🪪 ${item.national_id || "---"}</span>
+                            <span class="amount">💰 ${Number(item.amount || 0).toLocaleString()} ريال</span>
                         </div>
-                        <div class="subject">+''+</div>
+                        <div class="subject">${item.subject || ""}</div>
                     </div>
                 </div>
-            ).join('');
+            `).join('');
 
             historyList.style.display = 'flex';
         }
