@@ -146,6 +146,22 @@
             text-align: left;
         }
 
+        .delete-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+        }
+
+        .delete-btn:hover {
+            background: #dc2626;
+        }
+
         .empty-state {
             background: #fff;
             border-radius: 16px;
@@ -512,6 +528,7 @@
                                 <span class="request-detail">📝 ${req.subject}</span>
                             </div>
                             <div class="request-time">🕐 ${formatTime(req.created_at)}</div>
+                            <button class="delete-btn" onclick="event.stopPropagation(); deleteRequest('${req.id}', '${req.beneficiary_name}')">🗑️ حذف</button>
                         </div>
                     `;
                 }).join('');
@@ -522,6 +539,28 @@
             const data = JSON.parse(decodeURIComponent(encodedData));
             const params = new URLSearchParams(data);
             window.location.href = '/?' + params.toString();
+        }
+
+        async function deleteRequest(requestId, beneficiaryName) {
+            if (!confirm(`هل تريد حذف طلب التوقيع لـ "${beneficiaryName}"؟`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/requests?id=${requestId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    loadRequests();
+                } else {
+                    alert('فشل في حذف الطلب: ' + (result.message || 'خطأ غير معروف'));
+                }
+            } catch (error) {
+                alert('خطأ في الاتصال: ' + error.message);
+            }
         }
 
         function formatTime(timestamp) {
