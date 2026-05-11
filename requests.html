@@ -306,6 +306,48 @@
             cursor: pointer;
         }
 
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .tab-btn.active {
+            background: #0d9488;
+            color: #fff;
+        }
+
+        .tab-btn:hover:not(.active) {
+            background: #d1d5db;
+        }
+
+        .history-item {
+            background: #f0fdf4;
+            border-right: 4px solid #22c55e;
+        }
+
+        .history-badge {
+            background: #22c55e;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-right: 8px;
+        }
+
         .pin-error {
             color: #c62828;
             margin-top: 12px;
@@ -360,12 +402,28 @@
             <span class="status-count" id="requestCount">0</span>
         </div>
 
-        <div id="loadingState" class="loading">
-            <div class="spinner"></div>
-            <p>جاري تحميل الطلبات...</p>
+        <div class="tabs">
+            <button class="tab-btn active" id="tabPending" onclick="switchTab('pending')">⏳ الطلبات المنتظرة</button>
+            <button class="tab-btn" id="tabHistory" onclick="switchTab('history')">✅ سجل التوقيعات</button>
         </div>
 
-        <div id="requestsList" class="requests-list" style="display: none;"></div>
+        <div id="pendingSection">
+            <div id="loadingState" class="loading">
+                <div class="spinner"></div>
+                <p>جاري تحميل الطلبات...</p>
+            </div>
+
+            <div id="requestsList" class="requests-list" style="display: none;"></div>
+        </div>
+
+        <div id="historySection" style="display: none;">
+            <div id="historyLoading" class="loading">
+                <div class="spinner"></div>
+                <p>جاري تحميل السجل...</p>
+            </div>
+
+            <div id="historyList" class="requests-list" style="display: none;"></div>
+        </div>
 
         <div id="emptyState" class="empty-state" style="display: none;">
             <div class="empty-icon">✅</div>
@@ -377,7 +435,7 @@
         <button class="logout-btn" onclick="logout()">🚪 خروج</button>
     </div>
 
-    <button class="refresh-btn" id="refreshBtn" onclick="loadRequests()">🔄</button>
+    <button class="refresh-btn" id="refreshBtn" onclick="refreshCurrentTab()">🔄</button>
 
     <script>
         let lastRequestIds = new Set();
@@ -503,6 +561,94 @@
             currentUser = '';
             currentRole = 'user';
             showLoginPage();
+        }
+
+        let currentTab = 'pending';
+        let historyLoaded = false;
+
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons
+            document.getElementById('tabPending').classList.toggle('active', tab === 'pending');
+            document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+            
+            // Show/hide sections
+            document.getElementById('pendingSection').style.display = tab === 'pending' ? 'block' : 'none';
+            document.getElementById('historySection').style.display = tab === 'history' ? 'block' : 'none';
+            
+            // Load history if not loaded yet
+            if (tab === 'history' && !historyLoaded) {
+                loadHistory();
+            }
+        }
+
+        function refreshCurrentTab() {
+            if (currentTab === 'history') {
+                historyLoaded = false;
+                loadHistory();
+            } else {
+                loadRequests();
+            }
+        }
+
+        async function loadHistory() {
+            const historyLoading = document.getElementById('historyLoading');
+            const historyList = document.getElementById('historyList');
+            
+            historyLoading.style.display = 'flex';
+            historyList.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/history', {
+                    headers: { 'Authorization': 'Bearer ' + authToken }
+                });
+                const data = await response.json();
+
+                if (data.error === 'unauthorized') {
+                    logout();
+                    return;
+                }
+
+                displayHistory(data.history || []);
+                historyLoaded = true;
+            } catch (error) {
+                console.error('Error loading history:', error);
+                historyList.innerHTML = '<div class="empty-state"><p>خطأ في تحميل السجل</p></div>';
+                historyList.style.display = 'block';
+            } finally {
+                historyLoading.style.display = 'none';
+            }
+        }
+
+        function displayHistory(history) {
+            const historyList = document.getElementById('historyList');
+            
+            if (history.length === 0) {
+                historyList.innerHTML = '<div class="empty-state"><p>لا يوجد توقيعات مكتملة</p></div>';
+                historyList.style.display = 'block';
+                return;
+            }
+
+            historyList.innerHTML = history.map(item => 
+                <div class="request-card history-item">
+                    <div class="card-header">
+                        <span class="history-badge">✅ مكتمل</span>
+                        <span class="receipt-no">#+''+</span>
+                        <span class="time">+''+</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="beneficiary-name">+''+</div>
+                        <div class="details">
+                            <span>🪪 +''+</span>
+                            <span class="amount">💰 +''+ ريال</span>
+                        </div>
+                        <div class="subject">+''+</div>
+                    </div>
+                </div>
+            ).join('');
+
+            historyList.style.display = 'flex';
         }
 
         async function loadRequests() {

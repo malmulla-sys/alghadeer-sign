@@ -5,7 +5,7 @@ Vercel Serverless Function
 import json
 import os
 import base64
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler
 import urllib.request
 import urllib.parse
@@ -13,6 +13,9 @@ import urllib.parse
 # Telegram Bot Token (set in Vercel environment variables)
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 ADMIN_CHAT_ID = os.environ.get('ADMIN_CHAT_ID', '')
+
+# توقيت الرياض (UTC+3)
+RIYADH_TZ = timezone(timedelta(hours=3))
 
 
 class handler(BaseHTTPRequestHandler):
@@ -55,6 +58,12 @@ class handler(BaseHTTPRequestHandler):
             if BOT_TOKEN and ADMIN_CHAT_ID:
                 success = send_signature_to_bot(data)
                 if success:
+                    # حفظ في سجل التوقيعات
+                    try:
+                        save_to_history(data)
+                    except:
+                        pass  # تجاهل أي خطأ في الحفظ
+
                     # محاولة حذف الطلب من قائمة الانتظار (لا يؤثر على النجاح)
                     request_id = data.get('receipt_id') or data.get('id', '')
                     if request_id:
@@ -148,6 +157,55 @@ def send_signature_to_bot(data: dict) -> bool:
 
     except Exception as e:
         print(f"Failed to send to bot: {e}")
+        return False
+
+
+def save_to_history(data: dict) -> bool:
+    """حفظ التوقيع المكتمل في السجل"""
+    KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
+    KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN', '')
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return False
+
+    try:
+        # Get current history
+        url = f"{KV_REST_API_URL}/get/signature_history"
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            result_data = json.loads(resp.read().decode())
+            result = result_data.get("result")
+            history = json.loads(result) if result else []
+
+        # Create history entry (without signature image to save space)
+        history_entry = {
+            'id': data.get('receipt_id') or data.get('id', ''),
+            'receipt_no': data.get('receipt_no', ''),
+            'beneficiary_name': data.get('beneficiary_name', ''),
+            'national_id': data.get('national_id', ''),
+            'amount': data.get('amount', ''),
+            'subject': data.get('subject', ''),
+            'signed_at': datetime.now(RIYADH_TZ).isoformat()
+        }
+
+        # Add to beginning of list
+        history.insert(0, history_entry)
+
+        # Keep only last 100 entries
+        history = history[:100]
+
+        # Save back
+        save_url = f"{KV_REST_API_URL}/set/signature_history"
+        save_data = json.dumps(history).encode()
+        save_req = urllib.request.Request(save_url, data=save_data, method='POST')
+        save_req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+        save_req.add_header("Content-Type", "application/json")
+        urllib.request.urlopen(save_req, timeout=5)
+
+        return True
+    except Exception as e:
+        print(f"Failed to save history: {e}")
         return False
 
 
