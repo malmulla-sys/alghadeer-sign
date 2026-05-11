@@ -19,6 +19,20 @@ class handler(BaseHTTPRequestHandler):
         kv_url = os.environ.get('KV_REST_API_URL', '')
         kv_token = os.environ.get('KV_REST_API_TOKEN', '')
         bot_api_key = os.environ.get('SIGNATURE_BOT_API_KEY', '')
+        sig_users = os.environ.get('SIGNATURE_USERS', '')
+
+        # Parse users to show count and names (not passwords)
+        users_info = '⚠️ يستخدم الافتراضي'
+        if sig_users:
+            try:
+                user_list = []
+                for u in sig_users.split(','):
+                    parts = u.strip().split(':')
+                    if len(parts) >= 1:
+                        user_list.append(parts[0])
+                users_info = f'✅ {len(user_list)} مستخدم: {", ".join(user_list)}'
+            except:
+                users_info = '❌ خطأ في الصيغة'
 
         status = {
             'TELEGRAM_BOT_TOKEN': '✅ مضبوط' if bot_token else '❌ غير مضبوط',
@@ -26,6 +40,7 @@ class handler(BaseHTTPRequestHandler):
             'KV_REST_API_URL': '✅ مضبوط' if kv_url else '❌ غير مضبوط',
             'KV_REST_API_TOKEN': '✅ مضبوط' if kv_token else '❌ غير مضبوط',
             'SIGNATURE_BOT_API_KEY': '✅ مضبوط' if bot_api_key else '⚠️ يستخدم الافتراضي',
+            'SIGNATURE_USERS': users_info,
         }
 
         # Check if critical vars are set
