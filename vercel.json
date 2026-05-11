@@ -49,6 +49,10 @@
       "dest": "/api/confirmed.py"
     },
     {
+      "src": "/api/history",
+      "dest": "/api/history.py"
+    },
+    {
       "src": "/requests",
       "dest": "/requests.html"
     },
