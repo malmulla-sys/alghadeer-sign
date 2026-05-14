@@ -1,5 +1,5 @@
 """
-wa_webhook.py - WhatsApp Auto-Reply Webhook with Interactive Poll
+wa_webhook.py - WhatsApp Auto-Reply Webhook with Interactive List Menu
 """
 import os
 import json
@@ -16,12 +16,17 @@ GREEN_API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 BASE_URL = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}"
 
 # الرسالة الترحيبية
-WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار أو اضغط على التصويت"
+WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋"
 
-# خيارات الاستطلاع
-POLL_OPTIONS = [
-    {"optionName": "📍 العنوان وأوقات العمل"},
-    {"optionName": "📞 تواصل مع موظف"},
+# قائمة الخدمات التفاعلية
+LIST_SECTIONS = [
+    {
+        "title": "خدماتنا",
+        "rows": [
+            {"rowId": "address", "title": "📍 العنوان وأوقات العمل"},
+            {"rowId": "contact", "title": "📞 تواصل مع موظف"},
+        ]
+    }
 ]
 
 # الردود
@@ -61,25 +66,27 @@ def normalize(phone):
     return "966" + p[1:] if p.startswith("0") else p
 
 
-def send_poll(phone, message, options):
-    """إرسال استطلاع تفاعلي."""
+def send_list(phone, message, sections, button_text="اختر خدمة"):
+    """إرسال قائمة تفاعلية."""
     if not GREEN_API_INSTANCE_ID or not GREEN_API_TOKEN or not urlopen:
         return False
 
-    url = f"{BASE_URL}/sendPoll/{GREEN_API_TOKEN}"
+    url = f"{BASE_URL}/sendList/{GREEN_API_TOKEN}"
     data = json.dumps({
         "chatId": f"{normalize(phone)}@c.us",
         "message": message,
-        "options": options,
-        "multipleAnswers": False,
+        "title": "مجموعة الغدير",
+        "buttonText": button_text,
+        "sections": sections,
     }).encode()
 
     try:
         req = Request(url, data=data, headers={"Content-Type": "application/json"})
         with urlopen(req, timeout=15) as r:
+            print(f"sendList response: {r.status}", flush=True)
             return r.status == 200
     except Exception as e:
-        print(f"Error sending poll: {e}")
+        print(f"Error sending list: {e}")
         return False
 
 
@@ -158,39 +165,34 @@ class handler(BaseHTTPRequestHandler):
 
                         # كلمة مفتاحية لإظهار القائمة
                         elif any(kw in text_lower for kw in MENU_KEYWORDS):
-                            send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS)
+                            send_list(phone, WELCOME_MESSAGE, LIST_SECTIONS)
                             replied.add(phone)
                             response_sent = True
 
                         # رسالة جديدة من شخص لم نرد عليه
                         elif phone not in replied:
-                            if send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS):
+                            if send_list(phone, WELCOME_MESSAGE, LIST_SECTIONS):
                                 replied.add(phone)
                                 if len(replied) > 100:
                                     replied = set(list(replied)[-50:])
                             response_sent = True
 
-                    # التعامل مع جميع أنواع رسائل الاستطلاع
-                    elif "poll" in msg_type.lower():
-                        print(f"Poll message data: {json.dumps(message_data, ensure_ascii=False)}", flush=True)
-                        # محاولة استخراج الخيار المحدد
-                        poll_data = message_data.get("pollMessageData", message_data.get("pollUpdateMessage", {}))
-                        selected = poll_data.get("selectedOptions", poll_data.get("votes", []))
+                    # التعامل مع رد القائمة التفاعلية
+                    elif msg_type == "listResponseMessage":
+                        print(f"List response: {json.dumps(message_data, ensure_ascii=False)}", flush=True)
+                        list_data = message_data.get("listResponseMessageData", {})
+                        selected_id = list_data.get("selectedRowId", "")
 
-                        for opt in selected:
-                            opt_name = opt.get("optionName", opt.get("name", ""))
-                            if "عنوان" in opt_name or "العنوان" in opt_name:
-                                send_message(phone, RESPONSE_ADDRESS)
-                                response_sent = True
-                                break
-                            elif "موظف" in opt_name or "تواصل" in opt_name:
-                                send_message(phone, RESPONSE_CONTACT)
-                                response_sent = True
-                                break
+                        if selected_id == "address":
+                            send_message(phone, RESPONSE_ADDRESS)
+                            response_sent = True
+                        elif selected_id == "contact":
+                            send_message(phone, RESPONSE_CONTACT)
+                            response_sent = True
 
                     # أنواع أخرى - رد للأشخاص الجدد فقط
                     elif phone not in replied and not response_sent:
-                        if send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS):
+                        if send_list(phone, WELCOME_MESSAGE, LIST_SECTIONS):
                             replied.add(phone)
                             if len(replied) > 100:
                                 replied = set(list(replied)[-50:])
