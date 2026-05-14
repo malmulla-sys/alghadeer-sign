@@ -1,5 +1,5 @@
 """
-wa_webhook.py - WhatsApp Auto-Reply Webhook
+wa_webhook.py - WhatsApp Auto-Reply Webhook with Interactive Buttons
 """
 import os
 import json
@@ -13,9 +13,34 @@ except ImportError:
 
 GREEN_API_INSTANCE_ID = os.environ.get("GREEN_API_INSTANCE_ID", "")
 GREEN_API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
+BASE_URL = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}"
 
-AUTO_REPLY = "مرحباً بك 👋\n\nشكراً لتواصلك معنا.\nسيتم الرد عليك في أقرب وقت ممكن.\n\n— شركة الغدير"
+# الرسالة الترحيبية مع الأزرار
+WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋"
 
+# الأزرار
+BUTTONS = [
+    {"buttonId": "btn_address", "buttonText": {"displayText": "📍 العنوان"}},
+]
+
+# الردود على الأزرار
+BUTTON_RESPONSES = {
+    "btn_address": """مجموعة الغدير
+Alghadeer Group
+
+https://maps.app.goo.gl/JfggoLXjf5AmpgwF9
+
+أوقات العمل :
+السبت    :  08:30 ص - 04:30 م
+الأحد     :  08:30 ص - 04:30 م
+الاثنين   :  08:30 ص - 04:30 م
+الثلاثاء  :  08:30 ص - 04:30 م
+الأربعاء  :  08:30 ص - 04:30 م
+الخميس  :  08:30 ص - 04:30 م
+الجمعة   :  مغلق""",
+}
+
+# أرقام مستثناة
 EXCLUDED = ["966530364878", "966560454000"]
 replied = set()
 
@@ -25,16 +50,44 @@ def normalize(phone):
     return "966" + p[1:] if p.startswith("0") else p
 
 
-def reply(phone, msg):
+def send_buttons(phone, message, buttons):
+    """إرسال رسالة مع أزرار تفاعلية."""
     if not GREEN_API_INSTANCE_ID or not GREEN_API_TOKEN or not urlopen:
         return False
-    url = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}/sendMessage/{GREEN_API_TOKEN}"
-    data = json.dumps({"chatId": f"{normalize(phone)}@c.us", "message": msg}).encode()
+
+    url = f"{BASE_URL}/sendButton/{GREEN_API_TOKEN}"
+    data = json.dumps({
+        "chatId": f"{normalize(phone)}@c.us",
+        "message": message,
+        "buttons": buttons,
+    }).encode()
+
     try:
         req = Request(url, data=data, headers={"Content-Type": "application/json"})
         with urlopen(req, timeout=15) as r:
             return r.status == 200
-    except:
+    except Exception as e:
+        print(f"Error sending buttons: {e}")
+        return False
+
+
+def send_message(phone, message):
+    """إرسال رسالة نصية عادية."""
+    if not GREEN_API_INSTANCE_ID or not GREEN_API_TOKEN or not urlopen:
+        return False
+
+    url = f"{BASE_URL}/sendMessage/{GREEN_API_TOKEN}"
+    data = json.dumps({
+        "chatId": f"{normalize(phone)}@c.us",
+        "message": message,
+    }).encode()
+
+    try:
+        req = Request(url, data=data, headers={"Content-Type": "application/json"})
+        with urlopen(req, timeout=15) as r:
+            return r.status == 200
+    except Exception as e:
+        print(f"Error sending message: {e}")
         return False
 
 
@@ -45,7 +98,8 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({
             "status": "ok",
-            "configured": bool(GREEN_API_INSTANCE_ID and GREEN_API_TOKEN)
+            "configured": bool(GREEN_API_INSTANCE_ID and GREEN_API_TOKEN),
+            "buttons": len(BUTTONS)
         }).encode())
 
     def do_POST(self):
@@ -54,15 +108,30 @@ class handler(BaseHTTPRequestHandler):
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
             data = json.loads(body.decode())
 
-            if data.get("typeWebhook") == "incomingMessageReceived":
-                phone = normalize(data.get("senderData", {}).get("sender", ""))
-                if phone and phone not in EXCLUDED and phone not in replied:
-                    if reply(phone, AUTO_REPLY):
-                        replied.add(phone)
-                        if len(replied) > 100:
-                            replied = set(list(replied)[-50:])
-        except:
-            pass
+            type_webhook = data.get("typeWebhook", "")
+
+            if type_webhook == "incomingMessageReceived":
+                sender_data = data.get("senderData", {})
+                message_data = data.get("messageData", {})
+
+                phone = normalize(sender_data.get("sender", ""))
+                msg_type = message_data.get("typeMessage", "")
+
+                if phone and phone not in EXCLUDED:
+                    # التحقق من ضغط زر
+                    if msg_type == "buttonsResponseMessage":
+                        button_id = message_data.get("buttonsResponseMessage", {}).get("selectedButtonId", "")
+                        if button_id in BUTTON_RESPONSES:
+                            send_message(phone, BUTTON_RESPONSES[button_id])
+
+                    # رسالة جديدة - إرسال الترحيب مع الأزرار
+                    elif phone not in replied:
+                        if send_buttons(phone, WELCOME_MESSAGE, BUTTONS):
+                            replied.add(phone)
+                            if len(replied) > 100:
+                                replied = set(list(replied)[-50:])
+        except Exception as e:
+            print(f"Webhook error: {e}")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
