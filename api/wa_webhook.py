@@ -16,7 +16,7 @@ GREEN_API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 BASE_URL = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}"
 
 # الرسالة الترحيبية
-WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:"
+WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار أو اضغط على التصويت"
 
 # خيارات الاستطلاع
 POLL_OPTIONS = [
@@ -24,9 +24,8 @@ POLL_OPTIONS = [
     {"optionName": "📞 تواصل مع موظف"},
 ]
 
-# الردود على الخيارات
-OPTION_RESPONSES = {
-    "📍 العنوان وأوقات العمل": """مجموعة الغدير
+# الردود
+RESPONSE_ADDRESS = """مجموعة الغدير
 Alghadeer Group
 
 https://maps.app.goo.gl/JfggoLXjf5AmpgwF9
@@ -38,18 +37,19 @@ https://maps.app.goo.gl/JfggoLXjf5AmpgwF9
 الثلاثاء  :  08:30 ص - 04:30 م
 الأربعاء  :  08:30 ص - 04:30 م
 الخميس  :  08:30 ص - 04:30 م
-الجمعة   :  مغلق""",
+الجمعة   :  مغلق"""
 
-    "📞 تواصل مع موظف": """للتواصل مع موظف:
+RESPONSE_CONTACT = """للتواصل مع موظف:
 
 📱 جوال: 0530364878
 📧 إيميل: info@alghadeer.com
 
-سيتم الرد عليك في أقرب وقت ممكن.""",
-}
+سيتم الرد عليك في أقرب وقت ممكن."""
 
-# كلمات تُظهر القائمة من جديد
+# كلمات مفتاحية
 MENU_KEYWORDS = ["قائمة", "ابدأ", "ابدا", "القائمة", "start", "menu", "hi", "hello", "مرحبا", "السلام"]
+ADDRESS_KEYWORDS = ["1", "١", "عنوان", "العنوان", "موقع", "الموقع", "اوقات", "أوقات"]
+CONTACT_KEYWORDS = ["2", "٢", "موظف", "تواصل", "اتصال", "رقم"]
 
 # أرقام مستثناة
 EXCLUDED = ["966530364878", "966560454000"]
@@ -111,17 +111,20 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({
             "status": "ok",
             "configured": bool(GREEN_API_INSTANCE_ID and GREEN_API_TOKEN),
-            "poll_options": [o["optionName"] for o in POLL_OPTIONS],
-            "menu_keywords": MENU_KEYWORDS
         }).encode())
 
     def do_POST(self):
         global replied
+        response_sent = False
+
         try:
             body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
             data = json.loads(body.decode())
 
             type_webhook = data.get("typeWebhook", "")
+
+            # Log for debugging
+            print(f"Webhook: {type_webhook}", flush=True)
 
             if type_webhook == "incomingMessageReceived":
                 sender_data = data.get("senderData", {})
@@ -130,25 +133,32 @@ class handler(BaseHTTPRequestHandler):
                 phone = normalize(sender_data.get("sender", ""))
                 msg_type = message_data.get("typeMessage", "")
 
+                print(f"From: {phone}, Type: {msg_type}", flush=True)
+
                 if phone and phone not in EXCLUDED:
-                    # التحقق من اختيار في الاستطلاع
-                    if msg_type == "pollUpdateMessage":
-                        poll_data = message_data.get("pollUpdateMessage", {})
-                        votes = poll_data.get("votes", [])
-                        for vote in votes:
-                            option_name = vote.get("optionName", "")
-                            if option_name in OPTION_RESPONSES:
-                                send_message(phone, OPTION_RESPONSES[option_name])
-                                break
 
                     # رسالة نصية
-                    elif msg_type == "textMessage":
-                        text = message_data.get("textMessageData", {}).get("textMessage", "").strip().lower()
+                    if msg_type == "textMessage":
+                        text = message_data.get("textMessageData", {}).get("textMessage", "").strip()
+                        text_lower = text.lower()
+
+                        print(f"Text: {text}", flush=True)
+
+                        # طلب العنوان
+                        if any(kw in text_lower or kw in text for kw in ADDRESS_KEYWORDS):
+                            send_message(phone, RESPONSE_ADDRESS)
+                            response_sent = True
+
+                        # طلب التواصل
+                        elif any(kw in text_lower or kw in text for kw in CONTACT_KEYWORDS):
+                            send_message(phone, RESPONSE_CONTACT)
+                            response_sent = True
 
                         # كلمة مفتاحية لإظهار القائمة
-                        if any(kw in text for kw in MENU_KEYWORDS):
+                        elif any(kw in text_lower for kw in MENU_KEYWORDS):
                             send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS)
                             replied.add(phone)
+                            response_sent = True
 
                         # رسالة جديدة من شخص لم نرد عليه
                         elif phone not in replied:
@@ -156,16 +166,35 @@ class handler(BaseHTTPRequestHandler):
                                 replied.add(phone)
                                 if len(replied) > 100:
                                     replied = set(list(replied)[-50:])
+                            response_sent = True
+
+                    # التعامل مع جميع أنواع رسائل الاستطلاع
+                    elif "poll" in msg_type.lower():
+                        print(f"Poll message data: {json.dumps(message_data, ensure_ascii=False)}", flush=True)
+                        # محاولة استخراج الخيار المحدد
+                        poll_data = message_data.get("pollMessageData", message_data.get("pollUpdateMessage", {}))
+                        selected = poll_data.get("selectedOptions", poll_data.get("votes", []))
+
+                        for opt in selected:
+                            opt_name = opt.get("optionName", opt.get("name", ""))
+                            if "عنوان" in opt_name or "العنوان" in opt_name:
+                                send_message(phone, RESPONSE_ADDRESS)
+                                response_sent = True
+                                break
+                            elif "موظف" in opt_name or "تواصل" in opt_name:
+                                send_message(phone, RESPONSE_CONTACT)
+                                response_sent = True
+                                break
 
                     # أنواع أخرى - رد للأشخاص الجدد فقط
-                    elif phone not in replied:
+                    elif phone not in replied and not response_sent:
                         if send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS):
                             replied.add(phone)
                             if len(replied) > 100:
                                 replied = set(list(replied)[-50:])
 
         except Exception as e:
-            print(f"Webhook error: {e}")
+            print(f"Webhook error: {e}", flush=True)
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
