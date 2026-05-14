@@ -1,5 +1,5 @@
 """
-wa_webhook.py - WhatsApp Auto-Reply Webhook with Interactive Buttons
+wa_webhook.py - WhatsApp Auto-Reply Webhook with Interactive Poll
 """
 import os
 import json
@@ -15,17 +15,18 @@ GREEN_API_INSTANCE_ID = os.environ.get("GREEN_API_INSTANCE_ID", "")
 GREEN_API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 BASE_URL = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}"
 
-# الرسالة الترحيبية مع الأزرار
-WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋"
+# الرسالة الترحيبية
+WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:"
 
-# الأزرار (buttonText يجب أن يكون string)
-BUTTONS = [
-    {"buttonId": "btn_address", "buttonText": "📍 العنوان"},
+# خيارات الاستطلاع
+POLL_OPTIONS = [
+    {"optionName": "📍 العنوان وأوقات العمل"},
+    {"optionName": "📞 تواصل مع موظف"},
 ]
 
-# الردود على الأزرار
-BUTTON_RESPONSES = {
-    "btn_address": """مجموعة الغدير
+# الردود على الخيارات
+OPTION_RESPONSES = {
+    "📍 العنوان وأوقات العمل": """مجموعة الغدير
 Alghadeer Group
 
 https://maps.app.goo.gl/JfggoLXjf5AmpgwF9
@@ -38,6 +39,13 @@ https://maps.app.goo.gl/JfggoLXjf5AmpgwF9
 الأربعاء  :  08:30 ص - 04:30 م
 الخميس  :  08:30 ص - 04:30 م
 الجمعة   :  مغلق""",
+
+    "📞 تواصل مع موظف": """للتواصل مع موظف:
+
+📱 جوال: 0530364878
+📧 إيميل: info@alghadeer.com
+
+سيتم الرد عليك في أقرب وقت ممكن.""",
 }
 
 # كلمات تُظهر القائمة من جديد
@@ -53,16 +61,17 @@ def normalize(phone):
     return "966" + p[1:] if p.startswith("0") else p
 
 
-def send_buttons(phone, message, buttons):
-    """إرسال رسالة مع أزرار تفاعلية."""
+def send_poll(phone, message, options):
+    """إرسال استطلاع تفاعلي."""
     if not GREEN_API_INSTANCE_ID or not GREEN_API_TOKEN or not urlopen:
         return False
 
-    url = f"{BASE_URL}/sendButtons/{GREEN_API_TOKEN}"
+    url = f"{BASE_URL}/sendPoll/{GREEN_API_TOKEN}"
     data = json.dumps({
         "chatId": f"{normalize(phone)}@c.us",
         "message": message,
-        "buttons": buttons,
+        "options": options,
+        "multipleAnswers": False,
     }).encode()
 
     try:
@@ -70,7 +79,7 @@ def send_buttons(phone, message, buttons):
         with urlopen(req, timeout=15) as r:
             return r.status == 200
     except Exception as e:
-        print(f"Error sending buttons: {e}")
+        print(f"Error sending poll: {e}")
         return False
 
 
@@ -102,7 +111,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({
             "status": "ok",
             "configured": bool(GREEN_API_INSTANCE_ID and GREEN_API_TOKEN),
-            "buttons": len(BUTTONS),
+            "poll_options": [o["optionName"] for o in POLL_OPTIONS],
             "menu_keywords": MENU_KEYWORDS
         }).encode())
 
@@ -122,11 +131,15 @@ class handler(BaseHTTPRequestHandler):
                 msg_type = message_data.get("typeMessage", "")
 
                 if phone and phone not in EXCLUDED:
-                    # التحقق من ضغط زر
-                    if msg_type == "buttonsResponseMessage":
-                        button_id = message_data.get("buttonsResponseMessage", {}).get("selectedButtonId", "")
-                        if button_id in BUTTON_RESPONSES:
-                            send_message(phone, BUTTON_RESPONSES[button_id])
+                    # التحقق من اختيار في الاستطلاع
+                    if msg_type == "pollUpdateMessage":
+                        poll_data = message_data.get("pollUpdateMessage", {})
+                        votes = poll_data.get("votes", [])
+                        for vote in votes:
+                            option_name = vote.get("optionName", "")
+                            if option_name in OPTION_RESPONSES:
+                                send_message(phone, OPTION_RESPONSES[option_name])
+                                break
 
                     # رسالة نصية
                     elif msg_type == "textMessage":
@@ -134,19 +147,19 @@ class handler(BaseHTTPRequestHandler):
 
                         # كلمة مفتاحية لإظهار القائمة
                         if any(kw in text for kw in MENU_KEYWORDS):
-                            send_buttons(phone, WELCOME_MESSAGE, BUTTONS)
+                            send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS)
                             replied.add(phone)
 
                         # رسالة جديدة من شخص لم نرد عليه
                         elif phone not in replied:
-                            if send_buttons(phone, WELCOME_MESSAGE, BUTTONS):
+                            if send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS):
                                 replied.add(phone)
                                 if len(replied) > 100:
                                     replied = set(list(replied)[-50:])
 
-                    # أنواع أخرى (صور، صوت، إلخ) - رد للأشخاص الجدد فقط
+                    # أنواع أخرى - رد للأشخاص الجدد فقط
                     elif phone not in replied:
-                        if send_buttons(phone, WELCOME_MESSAGE, BUTTONS):
+                        if send_poll(phone, WELCOME_MESSAGE, POLL_OPTIONS):
                             replied.add(phone)
                             if len(replied) > 100:
                                 replied = set(list(replied)[-50:])
