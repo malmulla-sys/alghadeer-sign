@@ -1,2 +1,1 @@
-# Dependencies for Vercel serverless functions
-httpx>=0.24.0
+# No external dependencies - using Python standard library only
