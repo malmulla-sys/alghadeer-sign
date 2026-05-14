@@ -40,6 +40,9 @@ https://maps.app.goo.gl/JfggoLXjf5AmpgwF9
 الجمعة   :  مغلق""",
 }
 
+# كلمات تُظهر القائمة من جديد
+MENU_KEYWORDS = ["قائمة", "ابدأ", "ابدا", "القائمة", "start", "menu", "hi", "hello", "مرحبا", "السلام"]
+
 # أرقام مستثناة
 EXCLUDED = ["966530364878", "966560454000"]
 replied = set()
@@ -99,7 +102,8 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({
             "status": "ok",
             "configured": bool(GREEN_API_INSTANCE_ID and GREEN_API_TOKEN),
-            "buttons": len(BUTTONS)
+            "buttons": len(BUTTONS),
+            "menu_keywords": MENU_KEYWORDS
         }).encode())
 
     def do_POST(self):
@@ -124,12 +128,29 @@ class handler(BaseHTTPRequestHandler):
                         if button_id in BUTTON_RESPONSES:
                             send_message(phone, BUTTON_RESPONSES[button_id])
 
-                    # رسالة جديدة - إرسال الترحيب مع الأزرار
+                    # رسالة نصية
+                    elif msg_type == "textMessage":
+                        text = message_data.get("textMessageData", {}).get("textMessage", "").strip().lower()
+
+                        # كلمة مفتاحية لإظهار القائمة
+                        if any(kw in text for kw in MENU_KEYWORDS):
+                            send_buttons(phone, WELCOME_MESSAGE, BUTTONS)
+                            replied.add(phone)
+
+                        # رسالة جديدة من شخص لم نرد عليه
+                        elif phone not in replied:
+                            if send_buttons(phone, WELCOME_MESSAGE, BUTTONS):
+                                replied.add(phone)
+                                if len(replied) > 100:
+                                    replied = set(list(replied)[-50:])
+
+                    # أنواع أخرى (صور، صوت، إلخ) - رد للأشخاص الجدد فقط
                     elif phone not in replied:
                         if send_buttons(phone, WELCOME_MESSAGE, BUTTONS):
                             replied.add(phone)
                             if len(replied) > 100:
                                 replied = set(list(replied)[-50:])
+
         except Exception as e:
             print(f"Webhook error: {e}")
 
