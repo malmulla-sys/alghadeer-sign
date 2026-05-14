@@ -18,9 +18,9 @@ BASE_URL = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}"
 # الرسالة الترحيبية مع الأزرار
 WELCOME_MESSAGE = "مرحباً بك في مجموعة الغدير 👋"
 
-# الأزرار
+# الأزرار (buttonText يجب أن يكون string)
 BUTTONS = [
-    {"buttonId": "btn_address", "buttonText": {"displayText": "📍 العنوان"}},
+    {"buttonId": "btn_address", "buttonText": "📍 العنوان"},
 ]
 
 # الردود على الأزرار
@@ -58,7 +58,7 @@ def send_buttons(phone, message, buttons):
     if not GREEN_API_INSTANCE_ID or not GREEN_API_TOKEN or not urlopen:
         return False
 
-    url = f"{BASE_URL}/sendButton/{GREEN_API_TOKEN}"
+    url = f"{BASE_URL}/sendButtons/{GREEN_API_TOKEN}"
     data = json.dumps({
         "chatId": f"{normalize(phone)}@c.us",
         "message": message,
