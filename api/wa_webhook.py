@@ -176,13 +176,10 @@ class handler(BaseHTTPRequestHandler):
                             replied.add(phone)
                             response_sent = True
 
-                        # رسالة جديدة من شخص لم نرد عليه
-                        elif phone not in replied:
+                        # أي رسالة أخرى - أرسل القائمة
+                        else:
                             menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
-                            if send_message(phone, menu_msg):
-                                replied.add(phone)
-                                if len(replied) > 100:
-                                    replied = set(list(replied)[-50:])
+                            send_message(phone, menu_msg)
                             response_sent = True
 
                     # التعامل مع رد القائمة التفاعلية
@@ -198,12 +195,10 @@ class handler(BaseHTTPRequestHandler):
                             send_message(phone, RESPONSE_CONTACT)
                             response_sent = True
 
-                    # أنواع أخرى - رد للأشخاص الجدد فقط
-                    elif phone not in replied and not response_sent:
-                        if send_list(phone, WELCOME_MESSAGE, LIST_SECTIONS):
-                            replied.add(phone)
-                            if len(replied) > 100:
-                                replied = set(list(replied)[-50:])
+                    # أنواع أخرى (صور، صوت، فيديو...) - أرسل القائمة
+                    elif not response_sent:
+                        menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
+                        send_message(phone, menu_msg)
 
         except Exception as e:
             print(f"Webhook error: {e}", flush=True)
