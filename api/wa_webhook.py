@@ -123,8 +123,10 @@ class handler(BaseHTTPRequestHandler):
 
             type_webhook = data.get("typeWebhook", "")
 
-            # Log for debugging
-            print(f"Webhook: {type_webhook}", flush=True)
+            # Log ALL incoming webhooks for debugging
+            print(f"=== WEBHOOK RECEIVED ===", flush=True)
+            print(f"Type: {type_webhook}", flush=True)
+            print(f"Full data: {json.dumps(data, ensure_ascii=False)[:1000]}", flush=True)
 
             if type_webhook == "incomingMessageReceived":
                 sender_data = data.get("senderData", {})
