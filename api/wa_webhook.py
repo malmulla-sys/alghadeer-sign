@@ -169,18 +169,24 @@ class handler(BaseHTTPRequestHandler):
                             send_message(phone, RESPONSE_CONTACT)
                             response_sent = True
 
-                        # كلمة مفتاحية لإظهار القائمة
+                        # كلمة مفتاحية لإظهار القائمة (يعمل دائماً)
                         elif any(kw in text_lower for kw in MENU_KEYWORDS):
                             menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
                             send_message(phone, menu_msg)
                             replied.add(phone)
                             response_sent = True
 
-                        # أي رسالة أخرى - أرسل القائمة
-                        else:
+                        # شخص جديد لم يستلم القائمة من قبل
+                        elif phone not in replied:
                             menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
                             send_message(phone, menu_msg)
+                            replied.add(phone)
+                            if len(replied) > 500:
+                                replied = set(list(replied)[-250:])
                             response_sent = True
+
+                        # شخص سبق أن استلم القائمة - لا نرد على الرسائل العشوائية
+                        # else: pass
 
                     # التعامل مع رد القائمة التفاعلية
                     elif msg_type == "listResponseMessage":
@@ -195,10 +201,13 @@ class handler(BaseHTTPRequestHandler):
                             send_message(phone, RESPONSE_CONTACT)
                             response_sent = True
 
-                    # أنواع أخرى (صور، صوت، فيديو...) - أرسل القائمة
-                    elif not response_sent:
+                    # أنواع أخرى (صور، صوت، فيديو...) - أرسل القائمة للجدد فقط
+                    elif not response_sent and phone not in replied:
                         menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
                         send_message(phone, menu_msg)
+                        replied.add(phone)
+                        if len(replied) > 500:
+                            replied = set(list(replied)[-250:])
 
         except Exception as e:
             print(f"Webhook error: {e}", flush=True)
