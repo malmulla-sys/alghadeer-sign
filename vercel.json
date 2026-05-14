@@ -53,6 +53,10 @@
       "dest": "/api/history.py"
     },
     {
+      "src": "/api/wa_webhook",
+      "dest": "/api/wa_webhook.py"
+    },
+    {
       "src": "/requests",
       "dest": "/requests.html"
     },
