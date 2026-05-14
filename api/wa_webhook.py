@@ -69,25 +69,31 @@ def normalize(phone):
 def send_list(phone, message, sections, button_text="اختر خدمة"):
     """إرسال قائمة تفاعلية."""
     if not GREEN_API_INSTANCE_ID or not GREEN_API_TOKEN or not urlopen:
+        print("Missing credentials or urlopen", flush=True)
         return False
 
     url = f"{BASE_URL}/sendList/{GREEN_API_TOKEN}"
-    data = json.dumps({
+    payload = {
         "chatId": f"{normalize(phone)}@c.us",
         "message": message,
         "title": "مجموعة الغدير",
         "buttonText": button_text,
         "sections": sections,
-    }).encode()
+    }
+    print(f"Sending list to {phone}: {json.dumps(payload, ensure_ascii=False)}", flush=True)
+    data = json.dumps(payload).encode()
 
     try:
         req = Request(url, data=data, headers={"Content-Type": "application/json"})
         with urlopen(req, timeout=15) as r:
-            print(f"sendList response: {r.status}", flush=True)
+            response_body = r.read().decode()
+            print(f"sendList response: {r.status} - {response_body}", flush=True)
             return r.status == 200
     except Exception as e:
-        print(f"Error sending list: {e}")
-        return False
+        print(f"Error sending list: {e}", flush=True)
+        # Fallback: إرسال رسالة نصية عادية
+        fallback_msg = f"{message}\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
+        return send_message(phone, fallback_msg)
 
 
 def send_message(phone, message):
