@@ -171,13 +171,15 @@ class handler(BaseHTTPRequestHandler):
 
                         # كلمة مفتاحية لإظهار القائمة
                         elif any(kw in text_lower for kw in MENU_KEYWORDS):
-                            send_list(phone, WELCOME_MESSAGE, LIST_SECTIONS)
+                            menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
+                            send_message(phone, menu_msg)
                             replied.add(phone)
                             response_sent = True
 
                         # رسالة جديدة من شخص لم نرد عليه
                         elif phone not in replied:
-                            if send_list(phone, WELCOME_MESSAGE, LIST_SECTIONS):
+                            menu_msg = "مرحباً بك في مجموعة الغدير 👋\n\nاختر الخدمة:\n\n1️⃣ العنوان وأوقات العمل\n2️⃣ تواصل مع موظف\n\nأرسل رقم الخيار"
+                            if send_message(phone, menu_msg):
                                 replied.add(phone)
                                 if len(replied) > 100:
                                     replied = set(list(replied)[-50:])
