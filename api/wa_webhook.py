@@ -1,10 +1,11 @@
 """
 wa_webhook.py - WhatsApp Webhook
 - رد تلقائي بالعنوان للعملاء
-- تحويل صور الهوية من الزملاء إلى Telegram
+- تخزين صور الهوية من الزملاء في KV ليعالجها البوت
 """
 import os
 import json
+import time
 from http.server import BaseHTTPRequestHandler
 
 try:
@@ -21,6 +22,10 @@ GREEN_BASE_URL = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}"
 # Telegram
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "")
+
+# Upstash KV
+KV_REST_API_URL = os.environ.get("KV_REST_API_URL", "")
+KV_REST_API_TOKEN = os.environ.get("KV_REST_API_TOKEN", "")
 
 # أرقام الزملاء (يتم تحويل صورهم للبوت)
 COLLEAGUE_NUMBERS = ["966530364878", "966560454000"]
@@ -101,53 +106,80 @@ def send_telegram_message(text):
         return False
 
 
-def send_telegram_photo(photo_bytes, caption=""):
-    """إرسال صورة لـ Telegram."""
-    if not TELEGRAM_BOT_TOKEN or not ADMIN_CHAT_ID or not urlopen:
-        print("[TG] Missing credentials", flush=True)
+def store_pending_image(download_url, caption, sender_phone):
+    """تخزين صورة معلّقة في KV ليعالجها البوت."""
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN or not urlopen:
+        print("[KV] Missing credentials", flush=True)
         return False
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+    # إنشاء معرف فريد
+    image_id = f"wa_img_{int(time.time() * 1000)}"
 
-    # بناء multipart/form-data يدوياً
-    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+    # البيانات للتخزين
+    image_info = {
+        "id": image_id,
+        "download_url": download_url,
+        "caption": caption or "",
+        "sender": sender_phone,
+        "timestamp": int(time.time()),
+        "status": "pending",
+    }
 
-    body = []
-    # chat_id
-    body.append(f"--{boundary}".encode())
-    body.append(b'Content-Disposition: form-data; name="chat_id"')
-    body.append(b"")
-    body.append(ADMIN_CHAT_ID.encode())
-
-    # caption
-    if caption:
-        body.append(f"--{boundary}".encode())
-        body.append(b'Content-Disposition: form-data; name="caption"')
-        body.append(b"")
-        body.append(caption.encode())
-
-    # photo
-    body.append(f"--{boundary}".encode())
-    body.append(b'Content-Disposition: form-data; name="photo"; filename="id_image.jpg"')
-    body.append(b"Content-Type: image/jpeg")
-    body.append(b"")
-    body.append(photo_bytes)
-
-    body.append(f"--{boundary}--".encode())
-    body.append(b"")
-
-    body_bytes = b"\r\n".join(body)
+    # تخزين في KV
+    url = f"{KV_REST_API_URL}/set/{image_id}"
+    data = json.dumps(image_info).encode()
 
     try:
-        req = Request(url, data=body_bytes, headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        req = Request(url, data=data, headers={
+            "Authorization": f"Bearer {KV_REST_API_TOKEN}",
+            "Content-Type": "application/json",
         })
-        with urlopen(req, timeout=30) as r:
+        with urlopen(req, timeout=10) as r:
             result = r.status == 200
-            print(f"[TG] Photo sent: {result}", flush=True)
+            print(f"[KV] Stored pending image: {image_id} = {result}", flush=True)
+
+            # إضافة للقائمة
+            if result:
+                add_to_pending_list(image_id)
+
             return result
     except Exception as e:
-        print(f"[TG] Error sending photo: {e}", flush=True)
+        print(f"[KV] Error storing image: {e}", flush=True)
+        return False
+
+
+def add_to_pending_list(image_id):
+    """إضافة معرف الصورة لقائمة المعلّقات."""
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN or not urlopen:
+        return False
+
+    # جلب القائمة الحالية
+    url = f"{KV_REST_API_URL}/get/wa_pending_images"
+    try:
+        req = Request(url, headers={"Authorization": f"Bearer {KV_REST_API_TOKEN}"})
+        with urlopen(req, timeout=10) as r:
+            resp = json.loads(r.read().decode())
+            current_list = resp.get("result") or "[]"
+            if isinstance(current_list, str):
+                current_list = json.loads(current_list)
+    except:
+        current_list = []
+
+    # إضافة المعرف الجديد
+    if image_id not in current_list:
+        current_list.append(image_id)
+
+    # حفظ القائمة المحدّثة
+    url = f"{KV_REST_API_URL}/set/wa_pending_images"
+    data = json.dumps(current_list).encode()
+    try:
+        req = Request(url, data=data, headers={
+            "Authorization": f"Bearer {KV_REST_API_TOKEN}",
+            "Content-Type": "application/json",
+        })
+        with urlopen(req, timeout=10) as r:
+            return r.status == 200
+    except:
         return False
 
 
@@ -182,7 +214,7 @@ class handler(BaseHTTPRequestHandler):
                 print(f"[WH] From: {phone}, Type: {msg_type}", flush=True)
 
                 # ═══════════════════════════════════════════
-                # صور من الزملاء → تحويل لـ Telegram
+                # صور من الزملاء → تخزين في KV + إشعار Telegram
                 # ═══════════════════════════════════════════
                 if phone in COLLEAGUE_NUMBERS and msg_type == "imageMessage":
                     print(f"[WH] Image from colleague {phone}", flush=True)
@@ -192,22 +224,12 @@ class handler(BaseHTTPRequestHandler):
                     caption = image_data.get("caption", "")
 
                     if download_url:
-                        # تحميل الصورة
-                        photo_bytes = download_whatsapp_file(download_url)
-
-                        if photo_bytes:
-                            # إرسال لـ Telegram
-                            tg_caption = f"📱 صورة من واتساب\n📞 {phone}"
-                            if caption:
-                                tg_caption += f"\n📝 {caption}"
-
-                            if send_telegram_photo(photo_bytes, tg_caption):
-                                print("[WH] Photo forwarded to Telegram", flush=True)
-                            else:
-                                # fallback: إرسال رسالة نصية
-                                send_telegram_message(f"📱 استلمت صورة من {phone}\n(تعذر إرسال الصورة)\n\nCaption: {caption or 'لا يوجد'}")
+                        # تخزين في KV ليعالجها البوت
+                        if store_pending_image(download_url, caption, phone):
+                            send_telegram_message(f"📱 صورة هوية جديدة من واتساب\n📞 {phone}\n📝 {caption or '-'}\n\n⏳ جاري المعالجة...")
+                            print("[WH] Image stored in KV for processing", flush=True)
                         else:
-                            send_telegram_message(f"📱 استلمت صورة من {phone}\n(تعذر تحميل الصورة)")
+                            send_telegram_message(f"⚠️ فشل تخزين صورة من {phone}\nالرابط: {download_url[:50]}...")
 
                 # ═══════════════════════════════════════════
                 # رسائل من غير الزملاء → رد تلقائي
