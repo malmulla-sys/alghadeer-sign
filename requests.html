@@ -821,8 +821,15 @@
         // Initial load
         loadRequests();
 
-        // Auto-refresh every 10 seconds
-        setInterval(loadRequests, 10000);
+        // Auto-refresh every 10 seconds (both tabs)
+        setInterval(() => {
+            if (currentTab === 'history') {
+                historyLoaded = false;
+                loadHistory();
+            } else {
+                loadRequests();
+            }
+        }, 10000);
     </script>
 </body>
 </html>
