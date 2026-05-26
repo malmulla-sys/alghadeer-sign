@@ -92,17 +92,14 @@ class handler(BaseHTTPRequestHandler):
 
 def send_signature_to_bot(data: dict) -> bool:
     """
-    حفظ بيانات التوقيع في KV وإرسال مفتاح للبوت
+    حفظ بيانات التوقيع في KV وإرسال SIGNATURE_DATA للبوت لتوليد PDF تلقائياً
     """
-    import uuid
-
     try:
-        # توليد مفتاح فريد
-        sig_key = f"sig_{uuid.uuid4().hex[:12]}"
+        # استخراج receipt_id من البيانات
+        receipt_id = data.get('receipt_id') or data.get('id', '')
 
         # بيانات كاملة مع صورة التوقيع
         message_data = {
-            'type': 'SIGNATURE_RECEIVED',
             'receipt_no': data.get('receipt_no', ''),
             'beneficiary_name': data.get('beneficiary_name', ''),
             'national_id': data.get('national_id', ''),
@@ -110,43 +107,30 @@ def send_signature_to_bot(data: dict) -> bool:
             'subject': data.get('subject', ''),
             'date': data.get('date', ''),
             'signature': data.get('signature', ''),
-            'signed_at': data.get('signed_at', '')
+            'signed_at': data.get('signed_at', ''),
+            'proxy_name': data.get('proxy_name', ''),
+            'proxy_national_id': data.get('proxy_national_id', ''),
         }
 
-        # حفظ في KV
+        # حفظ في KV باستخدام receipt_id (statement_id) كمفتاح
         KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
         KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN', '')
 
-        if KV_REST_API_URL and KV_REST_API_TOKEN:
-            kv_url = f"{KV_REST_API_URL}/set/{sig_key}"
+        if KV_REST_API_URL and KV_REST_API_TOKEN and receipt_id:
+            kv_url = f"{KV_REST_API_URL}/set/sig:{receipt_id}"
             kv_data = json.dumps(message_data).encode('utf-8')
             kv_req = urllib.request.Request(kv_url, data=kv_data, method='POST')
             kv_req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
             kv_req.add_header("Content-Type", "application/json")
             urllib.request.urlopen(kv_req, timeout=10)
 
-        # إرسال رسالة مع زر لتوليد PDF
-        message = f"""✅ تم استلام توقيع إلكتروني
-
-📄 رقم السند: {data.get('receipt_no', 'غير محدد')}
-👤 المستفيد: {data.get('beneficiary_name', 'غير محدد')}
-🪪 الهوية: {data.get('national_id', 'غير محدد')}
-💰 المبلغ: {data.get('amount', '0')} ريال
-📝 الموضوع: {data.get('subject', 'غير محدد')}
-🕐 وقت التوقيع: {data.get('signed_at', '')[:19].replace('T', ' ')}"""
-
-        # إنشاء زر inline لتوليد PDF
-        inline_keyboard = {
-            "inline_keyboard": [[
-                {"text": "📄 توليد سند PDF", "callback_data": f"esign_pdf:{sig_key}"}
-            ]]
-        }
+        # إرسال SIGNATURE_DATA للبوت لتوليد PDF تلقائياً
+        signature_message = "SIGNATURE_DATA:" + json.dumps(message_data, ensure_ascii=False)
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {
             'chat_id': ADMIN_CHAT_ID,
-            'text': message,
-            'reply_markup': json.dumps(inline_keyboard)
+            'text': signature_message
         }
         msg_data = urllib.parse.urlencode(payload).encode()
 
