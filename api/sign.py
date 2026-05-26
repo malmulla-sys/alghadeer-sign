@@ -92,7 +92,7 @@ class handler(BaseHTTPRequestHandler):
 
 def send_signature_to_bot(data: dict) -> bool:
     """
-    حفظ بيانات التوقيع في KV وإرسال SIGNATURE_DATA للبوت لتوليد PDF تلقائياً
+    حفظ بيانات التوقيع في KV وإرسال إشعار للبوت لتوليد PDF تلقائياً
     """
     try:
         # استخراج receipt_id من البيانات
@@ -124,17 +124,29 @@ def send_signature_to_bot(data: dict) -> bool:
             kv_req.add_header("Content-Type", "application/json")
             urllib.request.urlopen(kv_req, timeout=10)
 
-        # إرسال SIGNATURE_DATA للبوت لتوليد PDF تلقائياً
-        signature_message = "SIGNATURE_DATA:" + json.dumps(message_data, ensure_ascii=False)
+        # إرسال إشعار بسيط للبوت (بدون صورة التوقيع الكبيرة)
+        # البوت سيجلب التوقيع من KV باستخدام المفتاح
+        notify_data = {
+            'type': 'NEW_SIGNATURE',
+            'stmt_id': receipt_id,
+            'beneficiary_name': data.get('beneficiary_name', ''),
+            'national_id': data.get('national_id', ''),
+            'amount': data.get('amount', ''),
+            'subject': data.get('subject', ''),
+            'date': data.get('date', ''),
+            'signed_at': data.get('signed_at', ''),
+        }
+
+        notification_message = "ESIGN_NOTIFY:" + json.dumps(notify_data, ensure_ascii=False)
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
+        payload = json.dumps({
             'chat_id': ADMIN_CHAT_ID,
-            'text': signature_message
-        }
-        msg_data = urllib.parse.urlencode(payload).encode()
+            'text': notification_message
+        })
 
-        req = urllib.request.Request(url, data=msg_data)
+        req = urllib.request.Request(url, data=payload.encode('utf-8'))
+        req.add_header('Content-Type', 'application/json')
         urllib.request.urlopen(req, timeout=10)
 
         return True
