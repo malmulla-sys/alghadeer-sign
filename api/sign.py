@@ -54,33 +54,44 @@ class handler(BaseHTTPRequestHandler):
                 }, ensure_ascii=False).encode('utf-8'))
                 return
 
-            # إرسال البيانات للبوت عبر Telegram
+            # حفظ التوقيع في KV + السجل + حذف من الانتظار (بغض النظر عن نجاح الإشعار)
+            request_id = data.get('receipt_id') or data.get('id', '')
+
+            # 1. حفظ في KV
+            try:
+                send_signature_to_bot(data)  # هذا يحفظ في KV
+            except:
+                pass
+
+            # 2. حفظ في سجل التوقيعات (للفحص الدوري)
+            try:
+                save_to_history(data)
+            except:
+                pass
+
+            # 3. حذف من قائمة الانتظار
+            if request_id:
+                try:
+                    remove_pending_request(request_id)
+                except:
+                    pass
+
+            # 4. إرسال إشعار بسيط للمشرف (اختياري)
             if BOT_TOKEN and ADMIN_CHAT_ID:
-                success = send_signature_to_bot(data)
-                if success:
-                    # حفظ في سجل التوقيعات
-                    try:
-                        save_to_history(data)
-                    except:
-                        pass  # تجاهل أي خطأ في الحفظ
+                try:
+                    notify_msg = f"✅ توقيع جديد: {data.get('beneficiary_name', '')} - {data.get('amount', '')} ريال"
+                    notify_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                    notify_data = json.dumps({'chat_id': ADMIN_CHAT_ID, 'text': notify_msg}).encode('utf-8')
+                    notify_req = urllib.request.Request(notify_url, data=notify_data)
+                    notify_req.add_header('Content-Type', 'application/json')
+                    urllib.request.urlopen(notify_req, timeout=5)
+                except:
+                    pass  # الإشعار اختياري
 
-                    # محاولة حذف الطلب من قائمة الانتظار (لا يؤثر على النجاح)
-                    request_id = data.get('receipt_id') or data.get('id', '')
-                    if request_id:
-                        try:
-                            remove_pending_request(request_id)
-                        except:
-                            pass  # تجاهل أي خطأ في الحذف
-
-                self.wfile.write(json.dumps({
-                    'success': True,
-                    'message': 'تم حفظ التوقيع بنجاح ✅'
-                }, ensure_ascii=False).encode('utf-8'))
-            else:
-                self.wfile.write(json.dumps({
-                    'success': False,
-                    'error': 'إعدادات البوت غير مكتملة'
-                }, ensure_ascii=False).encode('utf-8'))
+            self.wfile.write(json.dumps({
+                'success': True,
+                'message': 'تم حفظ التوقيع بنجاح ✅'
+            }, ensure_ascii=False).encode('utf-8'))
 
         except Exception as e:
             self.send_response(500)
@@ -92,7 +103,7 @@ class handler(BaseHTTPRequestHandler):
 
 def send_signature_to_bot(data: dict) -> bool:
     """
-    حفظ بيانات التوقيع في KV وإرسال إشعار للبوت لتوليد PDF تلقائياً
+    حفظ بيانات التوقيع في KV وإرسال رسالة منسقة مع زر للبوت
     """
     try:
         # استخراج receipt_id من البيانات
@@ -124,25 +135,32 @@ def send_signature_to_bot(data: dict) -> bool:
             kv_req.add_header("Content-Type", "application/json")
             urllib.request.urlopen(kv_req, timeout=10)
 
-        # إرسال إشعار بسيط للبوت (بدون صورة التوقيع الكبيرة)
-        # البوت سيجلب التوقيع من KV باستخدام المفتاح
-        notify_data = {
-            'type': 'NEW_SIGNATURE',
-            'stmt_id': receipt_id,
-            'beneficiary_name': data.get('beneficiary_name', ''),
-            'national_id': data.get('national_id', ''),
-            'amount': data.get('amount', ''),
-            'subject': data.get('subject', ''),
-            'date': data.get('date', ''),
-            'signed_at': data.get('signed_at', ''),
-        }
+        # تنسيق وقت التوقيع
+        signed_at = data.get('signed_at', '')
+        formatted_time = signed_at.replace('T', ' ')[:19] if signed_at else ''
 
-        notification_message = "ESIGN_NOTIFY:" + json.dumps(notify_data, ensure_ascii=False)
+        # إرسال رسالة منسقة مع زر
+        message = f"""✅ تم استلام توقيع إلكتروني
+
+📄 رقم السند: {data.get('receipt_no', receipt_id)}
+👤 المستفيد: {data.get('beneficiary_name', '')}
+🪪 الهوية: {data.get('national_id', '')}
+💰 المبلغ: {data.get('amount', '')} ريال
+📝 الموضوع: {data.get('subject', '')}
+🕐 وقت التوقيع: {formatted_time}"""
+
+        # زر لتوليد PDF
+        inline_keyboard = {
+            "inline_keyboard": [[
+                {"text": "📄 توليد سند PDF", "callback_data": f"esign_pdf:sig:{receipt_id}"}
+            ]]
+        }
 
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = json.dumps({
             'chat_id': ADMIN_CHAT_ID,
-            'text': notification_message
+            'text': message,
+            'reply_markup': inline_keyboard
         })
 
         req = urllib.request.Request(url, data=payload.encode('utf-8'))
