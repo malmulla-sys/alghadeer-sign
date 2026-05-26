@@ -101,9 +101,83 @@ class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         self.end_headers()
+
+    def do_POST(self):
+        """Add entry to history (bot only)"""
+        auth_header = self.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+
+        valid, username = _verify_token(token)
+        if not valid or username != 'bot':
+            self.send_response(401)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'success': False,
+                'error': 'unauthorized - bot only'
+            }).encode('utf-8'))
+            return
+
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            entry = json.loads(body.decode('utf-8'))
+
+            # Validate required fields
+            if not entry.get('id') or not entry.get('beneficiary_name'):
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': False,
+                    'error': 'Missing required fields'
+                }).encode('utf-8'))
+                return
+
+            # Get current history
+            history = _kv_get_history()
+
+            # Check if already exists
+            if str(entry.get('id')) in [str(h.get('id')) for h in history]:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'message': 'Already exists'
+                }).encode('utf-8'))
+                return
+
+            # Add to beginning
+            history.insert(0, entry)
+
+            # Keep only last 100
+            history = history[:100]
+
+            # Save
+            success = _kv_save_history(history)
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'success': success,
+                'message': 'تمت الإضافة' if success else 'فشل في الإضافة'
+            }, ensure_ascii=False).encode('utf-8'))
+
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({'success': False, 'error': str(e)}).encode())
 
     def do_GET(self):
         """Get signature history"""
