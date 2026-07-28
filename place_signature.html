@@ -19,7 +19,30 @@
             color: #fff;
             text-align: center;
             font-size: 14px;
-            padding: 10px;
+            padding: 6px;
+        }
+        .pagebar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            color: #fff;
+            padding: 6px 0 12px;
+            width: 100%;
+            max-width: 500px;
+        }
+        .pagebar button {
+            background: #334155;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .pagebar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
         #stage {
             position: relative;
@@ -93,9 +116,15 @@
 </head>
 <body>
 
-<div class="hint">اسحب التوقيع لمكانه الصحيح، كبّر/صغّر إذا لزم، ثم اضغط تأكيد</div>
+<div class="hint">اسحب التوقيع لمكانه في كل صفحة، كبّر/صغّر إذا لزم، ثم اضغط تأكيد</div>
 
 <div id="loading" class="loading">جاري تحميل المعاينة...</div>
+
+<div class="pagebar" id="pagebar" style="display:none;">
+    <button id="prevBtn" onclick="goPage(-1)">◀ السابقة</button>
+    <span id="pageLabel">صفحة 1 من 1</span>
+    <button id="nextBtn" onclick="goPage(1)">التالية ▶</button>
+</div>
 
 <div id="stage" style="display:none;">
     <img id="pageImg" alt="letter page">
@@ -106,7 +135,7 @@
 
 <div class="controls" id="controls" style="display:none;">
     <button class="btn btn-smaller" onclick="resizeSig(0.9)">➖</button>
-    <button class="btn btn-confirm" onclick="confirmPlacement()">✅ تأكيد الموضع</button>
+    <button class="btn btn-confirm" onclick="confirmPlacement()">✅ تأكيد كل الصفحات</button>
     <button class="btn btn-bigger" onclick="resizeSig(1.1)">➕</button>
 </div>
 
@@ -116,21 +145,74 @@
 const urlParams = new URLSearchParams(window.location.search);
 const requestId = urlParams.get('id') || '';
 
-let sigWidthPercent = 22; // نسبة من عرض الصفحة، قابلة للتكبير/التصغير
 const SIG_ASPECT = 638 / 1200; // نسبة أبعاد صورة التوقيع الأصلية
+const DEFAULT_WIDTH_PERCENT = 22;
+const DEFAULT_X_PERCENT = 15;
+const DEFAULT_Y_PERCENT = 55;
+
+let pageCount = 1;
+let currentPage = 0;
+let pageImages = []; // data URIs
+// كل عنصر: {x_percent, y_percent, width_percent} بالنسبة 0-100 (تُحوَّل إلى 0-1 عند الإرسال)
+let placements = [];
+
+function defaultPlacement() {
+    return { x_percent: DEFAULT_X_PERCENT, y_percent: DEFAULT_Y_PERCENT, width_percent: DEFAULT_WIDTH_PERCENT };
+}
 
 function layoutHandle() {
     const stage = document.getElementById('stage');
     const handle = document.getElementById('sigHandle');
-    const w = stage.clientWidth * (sigWidthPercent / 100);
+    const p = placements[currentPage];
+    const w = stage.clientWidth * (p.width_percent / 100);
     const h = w * SIG_ASPECT;
     handle.style.width = w + 'px';
     handle.style.height = h + 'px';
+    handle.style.left = (stage.clientWidth * (p.x_percent / 100)) + 'px';
+    handle.style.top = (stage.clientHeight * (p.y_percent / 100)) + 'px';
+}
+
+function saveCurrentHandlePosition() {
+    const stage = document.getElementById('stage');
+    const handle = document.getElementById('sigHandle');
+    const stageRect = stage.getBoundingClientRect();
+    const handleRect = handle.getBoundingClientRect();
+    if (stageRect.width === 0) return;
+    placements[currentPage] = {
+        x_percent: ((handleRect.left - stageRect.left) / stageRect.width) * 100,
+        y_percent: ((handleRect.top - stageRect.top) / stageRect.height) * 100,
+        width_percent: (handleRect.width / stageRect.width) * 100,
+    };
 }
 
 function resizeSig(factor) {
-    sigWidthPercent = Math.max(8, Math.min(60, sigWidthPercent * factor));
+    const p = placements[currentPage];
+    p.width_percent = Math.max(8, Math.min(60, p.width_percent * factor));
     layoutHandle();
+}
+
+function showPage(idx) {
+    currentPage = idx;
+    document.getElementById('pageImg').src = pageImages[idx];
+    document.getElementById('pageLabel').textContent = `صفحة ${idx + 1} من ${pageCount}`;
+    document.getElementById('prevBtn').disabled = (idx === 0);
+    document.getElementById('nextBtn').disabled = (idx === pageCount - 1);
+    // بعد تحميل الصورة الجديدة نعيد ضبط موضع مقبض التوقيع
+    requestAnimationFrame(layoutHandle);
+}
+
+function goPage(delta) {
+    saveCurrentHandlePosition();
+    const newIdx = currentPage + delta;
+    if (newIdx < 0 || newIdx >= pageCount) return;
+    showPage(newIdx);
+}
+
+async function fetchKey(key) {
+    const resp = await fetch(`/api/get_signature?key=${encodeURIComponent(key)}`);
+    const result = await resp.json();
+    if (!result.success) return null;
+    return result.data;
 }
 
 async function init() {
@@ -139,28 +221,35 @@ async function init() {
         return;
     }
     try {
-        const resp = await fetch(`/api/get_signature?key=letter_img:${requestId}`);
-        const result = await resp.json();
-        if (!result.success) {
+        const first = await fetchKey(`letter_img:${requestId}:0`);
+        if (!first) {
             document.getElementById('loading').textContent = 'تعذر تحميل المعاينة. أعد إرسال الملف من البوت.';
             return;
         }
+        pageCount = first.page_count || 1;
+        pageImages = [first.image_base64];
+
+        for (let i = 1; i < pageCount; i++) {
+            const pg = await fetchKey(`letter_img:${requestId}:${i}`);
+            pageImages.push(pg ? pg.image_base64 : first.image_base64);
+        }
+
+        placements = Array.from({ length: pageCount }, () => defaultPlacement());
+
         const img = document.getElementById('pageImg');
-        img.src = result.data.image_base64;
         img.onload = () => {
             document.getElementById('loading').style.display = 'none';
-            const stage = document.getElementById('stage');
-            stage.style.display = 'block';
+            document.getElementById('stage').style.display = 'block';
             document.getElementById('controls').style.display = 'flex';
+            document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
+            document.getElementById('pageLabel').textContent = `صفحة 1 من ${pageCount}`;
+            document.getElementById('prevBtn').disabled = true;
+            document.getElementById('nextBtn').disabled = (pageCount <= 1);
 
-            const handle = document.getElementById('sigHandle');
+            setupDrag(document.getElementById('sigHandle'), document.getElementById('stage'));
             layoutHandle();
-            // موضع ابتدائي: منتصف الصفحة تقريباً
-            handle.style.left = (stage.clientWidth * 0.15) + 'px';
-            handle.style.top = (stage.clientHeight * 0.55) + 'px';
-
-            setupDrag(handle, stage);
         };
+        img.src = pageImages[0];
     } catch (e) {
         document.getElementById('loading').textContent = 'خطأ في الاتصال بالخادم.';
     }
@@ -213,38 +302,39 @@ function setupDrag(handle, stage) {
 }
 
 async function confirmPlacement() {
-    const stage = document.getElementById('stage');
-    const handle = document.getElementById('sigHandle');
-
-    const stageRect = stage.getBoundingClientRect();
-    const handleRect = handle.getBoundingClientRect();
-
-    const x_percent = (handleRect.left - stageRect.left) / stageRect.width;
-    const y_percent = (handleRect.top - stageRect.top) / stageRect.height;
-    const width_percent = handleRect.width / stageRect.width;
-
+    saveCurrentHandlePosition();
     document.getElementById('controls').style.display = 'none';
+    document.getElementById('pagebar').style.display = 'none';
+
+    // تحويل النسب من 0-100 إلى 0-1 لكل صفحة
+    const payloadPlacements = placements.map(p => ({
+        x_percent: p.x_percent / 100,
+        y_percent: p.y_percent / 100,
+        width_percent: p.width_percent / 100,
+    }));
 
     try {
         const resp = await fetch('/api/letter_place', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: requestId, x_percent, y_percent, width_percent })
+            body: JSON.stringify({ id: requestId, placements: payloadPlacements })
         });
         const result = await resp.json();
         const statusEl = document.getElementById('statusMsg');
         statusEl.classList.add('show');
         if (result.success) {
-            statusEl.textContent = '✅ تم إرسال الموضع. ارجع للبوت لاستلام الملف النهائي.';
+            statusEl.textContent = '✅ تم إرسال كل المواضع. ارجع للبوت لاستلام الملف النهائي.';
         } else {
             statusEl.textContent = '❌ حدث خطأ، حاول مرة أخرى.';
             document.getElementById('controls').style.display = 'flex';
+            document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
         }
     } catch (e) {
         const statusEl = document.getElementById('statusMsg');
         statusEl.classList.add('show');
         statusEl.textContent = '❌ فشل الاتصال بالخادم.';
         document.getElementById('controls').style.display = 'flex';
+        document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
     }
 }
 

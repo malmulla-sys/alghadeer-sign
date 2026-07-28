@@ -55,6 +55,8 @@ class handler(BaseHTTPRequestHandler):
 
             request_id = data.get('id', '')
             image_base64 = data.get('image_base64', '')
+            page_index = data.get('page_index', 0)
+            page_count = data.get('page_count', 1)
             if not request_id or not image_base64:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -63,8 +65,10 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({'success': False, 'error': 'Missing id or image_base64'}).encode())
                 return
 
-            ok = _kv_set(f"letter_img:{request_id}", {
+            # كل صفحة تُخزَّن في مفتاح منفصل لتفادي تجاوز حد حجم القيمة الواحدة في KV
+            ok = _kv_set(f"letter_img:{request_id}:{page_index}", {
                 'image_base64': image_base64,
+                'page_count': page_count,
                 'created_at': int(time.time()),
             })
 

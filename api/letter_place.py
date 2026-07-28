@@ -72,11 +72,9 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(body.decode('utf-8'))
 
             request_id = data.get('id', '')
-            x_percent = data.get('x_percent')
-            y_percent = data.get('y_percent')
-            width_percent = data.get('width_percent')
+            placements = data.get('placements')  # قائمة، فهرسها = رقم الصفحة (0-based)، عنصر null = بلا توقيع
 
-            if not request_id or x_percent is None or y_percent is None:
+            if not request_id or placements is None:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -85,9 +83,7 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             ok = _kv_set(f"letter_place:{request_id}", {
-                'x_percent': float(x_percent),
-                'y_percent': float(y_percent),
-                'width_percent': float(width_percent) if width_percent is not None else None,
+                'placements': placements,
                 'placed_at': int(time.time()),
             })
 
