@@ -141,6 +141,10 @@
     </div>
 </div>
 
+<div class="pagebar" id="togglebar" style="display:none;">
+    <button id="toggleSigBtn" onclick="toggleSignatureForPage()" style="flex:1;">🖊️ يوجد توقيع بهذه الصفحة</button>
+</div>
+
 <div class="controls" id="controls" style="display:none;">
     <button class="btn btn-smaller" onclick="resizeSig(0.9)">➖</button>
     <button class="btn btn-confirm" onclick="confirmPlacement()">✅ تأكيد كل الصفحات</button>
@@ -163,14 +167,20 @@ let currentPage = 0;
 let pageImages = []; // data URIs
 // كل عنصر: {x_percent, y_percent, width_percent} بالنسبة 0-100 (تُحوَّل إلى 0-1 عند الإرسال)
 let placements = [];
+let signatureEnabled = []; // true/false لكل صفحة — false = بدون توقيع بهذه الصفحة
 
 function defaultPlacement() {
     return { x_percent: DEFAULT_X_PERCENT, y_percent: DEFAULT_Y_PERCENT, width_percent: DEFAULT_WIDTH_PERCENT };
 }
 
 function layoutHandle() {
-    const stage = document.getElementById('stage');
     const handle = document.getElementById('sigHandle');
+    if (!signatureEnabled[currentPage]) {
+        handle.style.display = 'none';
+        return;
+    }
+    handle.style.display = 'block';
+    const stage = document.getElementById('stage');
     const p = placements[currentPage];
     const w = stage.clientWidth * (p.width_percent / 100);
     const h = w * SIG_ASPECT;
@@ -181,6 +191,7 @@ function layoutHandle() {
 }
 
 function saveCurrentHandlePosition() {
+    if (!signatureEnabled[currentPage]) return;
     const stage = document.getElementById('stage');
     const handle = document.getElementById('sigHandle');
     const stageRect = stage.getBoundingClientRect();
@@ -194,13 +205,36 @@ function saveCurrentHandlePosition() {
 }
 
 function resizeSig(factor) {
+    if (!signatureEnabled[currentPage]) return;
     const p = placements[currentPage];
     p.width_percent = Math.max(8, Math.min(60, p.width_percent * factor));
     layoutHandle();
 }
 
+function updateToggleUI(idx) {
+    const btn = document.getElementById('toggleSigBtn');
+    if (signatureEnabled[idx]) {
+        btn.textContent = '🖊️ يوجد توقيع بهذه الصفحة';
+        btn.style.background = '#334155';
+    } else {
+        btn.textContent = '🚫 بدون توقيع بهذه الصفحة';
+        btn.style.background = '#7f1d1d';
+    }
+}
+
+function toggleSignatureForPage() {
+    saveCurrentHandlePosition();
+    signatureEnabled[currentPage] = !signatureEnabled[currentPage];
+    if (signatureEnabled[currentPage] && !placements[currentPage]) {
+        placements[currentPage] = defaultPlacement();
+    }
+    updateToggleUI(currentPage);
+    layoutHandle();
+}
+
 function updatePageUI(idx) {
     document.getElementById('pageLabel').textContent = `صفحة ${idx + 1} من ${pageCount}`;
+    updateToggleUI(idx);
     document.getElementById('prevBtn').disabled = (idx === 0);
     document.getElementById('nextBtn').disabled = (idx === pageCount - 1);
 }
@@ -245,6 +279,7 @@ async function init() {
         }
 
         placements = Array.from({ length: pageCount }, () => defaultPlacement());
+        signatureEnabled = Array.from({ length: pageCount }, () => true);
 
         const img = document.getElementById('pageImg');
         let firstLoad = true;
@@ -254,6 +289,7 @@ async function init() {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('stage').style.display = 'block';
                 document.getElementById('controls').style.display = 'flex';
+                document.getElementById('togglebar').style.display = 'flex';
                 document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
                 setupDrag(document.getElementById('sigHandle'), document.getElementById('stage'));
                 setupSwipe(document.getElementById('stage'));
@@ -343,17 +379,23 @@ function setupDrag(handle, stage) {
     document.addEventListener('touchend', end);
 }
 
+function showActionControls(show) {
+    const display = show ? 'flex' : 'none';
+    document.getElementById('controls').style.display = display;
+    document.getElementById('togglebar').style.display = display;
+    document.getElementById('pagebar').style.display = show ? (pageCount > 1 ? 'flex' : 'none') : 'none';
+}
+
 async function confirmPlacement() {
     saveCurrentHandlePosition();
-    document.getElementById('controls').style.display = 'none';
-    document.getElementById('pagebar').style.display = 'none';
+    showActionControls(false);
 
-    // تحويل النسب من 0-100 إلى 0-1 لكل صفحة
-    const payloadPlacements = placements.map(p => ({
+    // تحويل النسب من 0-100 إلى 0-1 لكل صفحة — null = بدون توقيع بهذه الصفحة
+    const payloadPlacements = placements.map((p, i) => signatureEnabled[i] ? {
         x_percent: p.x_percent / 100,
         y_percent: p.y_percent / 100,
         width_percent: p.width_percent / 100,
-    }));
+    } : null);
 
     try {
         const resp = await fetch('/api/letter_place', {
@@ -368,15 +410,13 @@ async function confirmPlacement() {
             statusEl.textContent = '✅ تم إرسال كل المواضع. ارجع للبوت لاستلام الملف النهائي.';
         } else {
             statusEl.textContent = '❌ حدث خطأ، حاول مرة أخرى.';
-            document.getElementById('controls').style.display = 'flex';
-            document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
+            showActionControls(true);
         }
     } catch (e) {
         const statusEl = document.getElementById('statusMsg');
         statusEl.classList.add('show');
         statusEl.textContent = '❌ فشل الاتصال بالخادم.';
-        document.getElementById('controls').style.display = 'flex';
-        document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
+        showActionControls(true);
     }
 }
 
