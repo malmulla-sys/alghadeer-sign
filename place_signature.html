@@ -191,14 +191,16 @@ function resizeSig(factor) {
     layoutHandle();
 }
 
-function showPage(idx) {
-    currentPage = idx;
-    document.getElementById('pageImg').src = pageImages[idx];
+function updatePageUI(idx) {
     document.getElementById('pageLabel').textContent = `صفحة ${idx + 1} من ${pageCount}`;
     document.getElementById('prevBtn').disabled = (idx === 0);
     document.getElementById('nextBtn').disabled = (idx === pageCount - 1);
-    // بعد تحميل الصورة الجديدة نعيد ضبط موضع مقبض التوقيع
-    requestAnimationFrame(layoutHandle);
+}
+
+function showPage(idx) {
+    currentPage = idx;
+    document.getElementById('pageImg').src = pageImages[idx];
+    updatePageUI(idx);
 }
 
 function goPage(delta) {
@@ -237,19 +239,20 @@ async function init() {
         placements = Array.from({ length: pageCount }, () => defaultPlacement());
 
         const img = document.getElementById('pageImg');
+        let firstLoad = true;
         img.onload = () => {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('stage').style.display = 'block';
-            document.getElementById('controls').style.display = 'flex';
-            document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
-            document.getElementById('pageLabel').textContent = `صفحة 1 من ${pageCount}`;
-            document.getElementById('prevBtn').disabled = true;
-            document.getElementById('nextBtn').disabled = (pageCount <= 1);
-
-            setupDrag(document.getElementById('sigHandle'), document.getElementById('stage'));
+            if (firstLoad) {
+                firstLoad = false;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('stage').style.display = 'block';
+                document.getElementById('controls').style.display = 'flex';
+                document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
+                setupDrag(document.getElementById('sigHandle'), document.getElementById('stage'));
+            }
             layoutHandle();
         };
         img.src = pageImages[0];
+        updatePageUI(0);
     } catch (e) {
         document.getElementById('loading').textContent = 'خطأ في الاتصال بالخادم.';
     }
