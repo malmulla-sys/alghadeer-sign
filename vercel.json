@@ -17,12 +17,32 @@
     {
       "src": "logo.png",
       "use": "@vercel/static"
+    },
+    {
+      "src": "signature_basim.png",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "place_signature.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/sign",
       "dest": "/api/sign.py"
+    },
+    {
+      "src": "/api/letter_upload",
+      "dest": "/api/letter_upload.py"
+    },
+    {
+      "src": "/api/letter_place",
+      "dest": "/api/letter_place.py"
+    },
+    {
+      "src": "/signature_basim.png",
+      "dest": "/signature_basim.png"
     },
     {
       "src": "/api/receipt",

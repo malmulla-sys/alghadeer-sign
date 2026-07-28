@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>وضع التوقيع</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #1e293b;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+        }
+        .hint {
+            color: #fff;
+            text-align: center;
+            font-size: 14px;
+            padding: 10px;
+        }
+        #stage {
+            position: relative;
+            max-width: 100%;
+            touch-action: none;
+            background: #fff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        #pageImg {
+            display: block;
+            width: 100%;
+            height: auto;
+            pointer-events: none;
+            user-select: none;
+        }
+        #sigHandle {
+            position: absolute;
+            cursor: grab;
+            touch-action: none;
+        }
+        #sigHandle img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+            user-select: none;
+        }
+        #sigHandle.dragging {
+            cursor: grabbing;
+            opacity: 0.85;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            padding: 16px;
+            width: 100%;
+            max-width: 500px;
+        }
+        .btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-confirm {
+            background: linear-gradient(135deg, #1e3a6e 0%, #2c5282 100%);
+            color: #fff;
+        }
+        .btn-smaller, .btn-bigger {
+            background: #334155;
+            color: #fff;
+            flex: 0 0 60px;
+        }
+        .status {
+            color: #fff;
+            text-align: center;
+            padding: 16px;
+            font-size: 16px;
+            display: none;
+        }
+        .status.show { display: block; }
+        .loading {
+            color: #cbd5e1;
+            text-align: center;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="hint">اسحب التوقيع لمكانه الصحيح، كبّر/صغّر إذا لزم، ثم اضغط تأكيد</div>
+
+<div id="loading" class="loading">جاري تحميل المعاينة...</div>
+
+<div id="stage" style="display:none;">
+    <img id="pageImg" alt="letter page">
+    <div id="sigHandle">
+        <img id="sigImg" src="/signature_basim.png" alt="signature">
+    </div>
+</div>
+
+<div class="controls" id="controls" style="display:none;">
+    <button class="btn btn-smaller" onclick="resizeSig(0.9)">➖</button>
+    <button class="btn btn-confirm" onclick="confirmPlacement()">✅ تأكيد الموضع</button>
+    <button class="btn btn-bigger" onclick="resizeSig(1.1)">➕</button>
+</div>
+
+<div class="status" id="statusMsg"></div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const requestId = urlParams.get('id') || '';
+
+let sigWidthPercent = 22; // نسبة من عرض الصفحة، قابلة للتكبير/التصغير
+const SIG_ASPECT = 638 / 1200; // نسبة أبعاد صورة التوقيع الأصلية
+
+function layoutHandle() {
+    const stage = document.getElementById('stage');
+    const handle = document.getElementById('sigHandle');
+    const w = stage.clientWidth * (sigWidthPercent / 100);
+    const h = w * SIG_ASPECT;
+    handle.style.width = w + 'px';
+    handle.style.height = h + 'px';
+}
+
+function resizeSig(factor) {
+    sigWidthPercent = Math.max(8, Math.min(60, sigWidthPercent * factor));
+    layoutHandle();
+}
+
+async function init() {
+    if (!requestId) {
+        document.getElementById('loading').textContent = 'رابط غير صالح.';
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/get_signature?key=letter_img:${requestId}`);
+        const result = await resp.json();
+        if (!result.success) {
+            document.getElementById('loading').textContent = 'تعذر تحميل المعاينة. أعد إرسال الملف من البوت.';
+            return;
+        }
+        const img = document.getElementById('pageImg');
+        img.src = result.data.image_base64;
+        img.onload = () => {
+            document.getElementById('loading').style.display = 'none';
+            const stage = document.getElementById('stage');
+            stage.style.display = 'block';
+            document.getElementById('controls').style.display = 'flex';
+
+            const handle = document.getElementById('sigHandle');
+            layoutHandle();
+            // موضع ابتدائي: منتصف الصفحة تقريباً
+            handle.style.left = (stage.clientWidth * 0.15) + 'px';
+            handle.style.top = (stage.clientHeight * 0.55) + 'px';
+
+            setupDrag(handle, stage);
+        };
+    } catch (e) {
+        document.getElementById('loading').textContent = 'خطأ في الاتصال بالخادم.';
+    }
+}
+
+function setupDrag(handle, stage) {
+    let dragging = false;
+    let offsetX = 0, offsetY = 0;
+
+    function getPoint(e) {
+        if (e.touches && e.touches.length) {
+            return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function start(e) {
+        dragging = true;
+        handle.classList.add('dragging');
+        const p = getPoint(e);
+        const rect = handle.getBoundingClientRect();
+        offsetX = p.x - rect.left;
+        offsetY = p.y - rect.top;
+        e.preventDefault();
+    }
+
+    function move(e) {
+        if (!dragging) return;
+        e.preventDefault();
+        const p = getPoint(e);
+        const stageRect = stage.getBoundingClientRect();
+        let left = p.x - stageRect.left - offsetX;
+        let top = p.y - stageRect.top - offsetY;
+        handle.style.left = left + 'px';
+        handle.style.top = top + 'px';
+    }
+
+    function end() {
+        dragging = false;
+        handle.classList.remove('dragging');
+    }
+
+    handle.addEventListener('mousedown', start);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+
+    handle.addEventListener('touchstart', start, { passive: false });
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', end);
+}
+
+async function confirmPlacement() {
+    const stage = document.getElementById('stage');
+    const handle = document.getElementById('sigHandle');
+
+    const stageRect = stage.getBoundingClientRect();
+    const handleRect = handle.getBoundingClientRect();
+
+    const x_percent = (handleRect.left - stageRect.left) / stageRect.width;
+    const y_percent = (handleRect.top - stageRect.top) / stageRect.height;
+    const width_percent = handleRect.width / stageRect.width;
+
+    document.getElementById('controls').style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/letter_place', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: requestId, x_percent, y_percent, width_percent })
+        });
+        const result = await resp.json();
+        const statusEl = document.getElementById('statusMsg');
+        statusEl.classList.add('show');
+        if (result.success) {
+            statusEl.textContent = '✅ تم إرسال الموضع. ارجع للبوت لاستلام الملف النهائي.';
+        } else {
+            statusEl.textContent = '❌ حدث خطأ، حاول مرة أخرى.';
+            document.getElementById('controls').style.display = 'flex';
+        }
+    } catch (e) {
+        const statusEl = document.getElementById('statusMsg');
+        statusEl.classList.add('show');
+        statusEl.textContent = '❌ فشل الاتصال بالخادم.';
+        document.getElementById('controls').style.display = 'flex';
+    }
+}
+
+init();
+</script>
+
+</body>
+</html>
