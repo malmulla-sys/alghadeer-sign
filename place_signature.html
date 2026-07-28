@@ -25,7 +25,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 14px;
+            gap: 10px;
             color: #fff;
             padding: 6px 0 12px;
             width: 100%;
@@ -35,10 +35,18 @@
             background: #334155;
             color: #fff;
             border: none;
-            border-radius: 8px;
-            padding: 8px 14px;
-            font-size: 14px;
+            border-radius: 10px;
+            padding: 16px 22px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
+            flex: 1;
+            touch-action: manipulation;
+        }
+        #pageLabel {
+            flex: 0 0 auto;
+            white-space: nowrap;
+            padding: 0 6px;
         }
         .pagebar button:disabled {
             opacity: 0.4;
@@ -248,6 +256,7 @@ async function init() {
                 document.getElementById('controls').style.display = 'flex';
                 document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
                 setupDrag(document.getElementById('sigHandle'), document.getElementById('stage'));
+                setupSwipe(document.getElementById('stage'));
             }
             layoutHandle();
         };
@@ -256,6 +265,36 @@ async function init() {
     } catch (e) {
         document.getElementById('loading').textContent = 'خطأ في الاتصال بالخادم.';
     }
+}
+
+function setupSwipe(stage) {
+    let touchStartX = null;
+    let touchStartTarget = null;
+
+    stage.addEventListener('touchstart', (e) => {
+        touchStartTarget = e.target;
+        touchStartX = e.touches[0].clientX;
+    }, { passive: true });
+
+    stage.addEventListener('touchend', (e) => {
+        const startX = touchStartX;
+        const startTarget = touchStartTarget;
+        touchStartX = null;
+        touchStartTarget = null;
+
+        if (startX === null) return;
+        // تجاهل إذا كان اللمس بدأ على مقبض التوقيع نفسه (يُعامَل كسحب للتوقيع لا كتنقل بين الصفحات)
+        if (startTarget && startTarget.closest('#sigHandle')) return;
+
+        const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : null;
+        if (endX === null) return;
+
+        const dx = endX - startX;
+        if (Math.abs(dx) > 40) {
+            if (dx < 0) goPage(1);   // سحب لليسار = الصفحة التالية
+            else goPage(-1);        // سحب لليمين = الصفحة السابقة
+        }
+    }, { passive: true });
 }
 
 function setupDrag(handle, stage) {
