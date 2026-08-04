@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>وضع التوقيع</title>
+    <title>وضع التوقيع والتاريخ</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -66,26 +66,51 @@
             pointer-events: none;
             user-select: none;
         }
-        #sigHandle {
+        .elHandle {
             position: absolute;
             cursor: grab;
             touch-action: none;
+            outline: 2px dashed transparent;
         }
-        #sigHandle img {
+        .elHandle img {
             width: 100%;
             height: 100%;
             display: block;
             pointer-events: none;
             user-select: none;
         }
-        #sigHandle.dragging {
+        .elHandle.dragging {
             cursor: grabbing;
             opacity: 0.85;
+        }
+        .elHandle.selected {
+            outline-color: #38bdf8;
+        }
+        .toggles {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 500px;
+            padding: 6px 0;
+        }
+        .toggles button {
+            flex: 1;
+            background: #334155;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .toggles button.off {
+            background: #7f1d1d;
         }
         .controls {
             display: flex;
             gap: 10px;
-            padding: 16px;
+            padding: 10px 16px 16px;
             width: 100%;
             max-width: 500px;
         }
@@ -124,7 +149,7 @@
 </head>
 <body>
 
-<div class="hint">اسحب التوقيع لمكانه في كل صفحة، كبّر/صغّر إذا لزم، ثم اضغط تأكيد</div>
+<div class="hint">اسحب التوقيع و/أو التاريخ لمكانهما في كل صفحة، كبّر/صغّر إذا لزم، ثم اضغط تأكيد</div>
 
 <div id="loading" class="loading">جاري تحميل المعاينة...</div>
 
@@ -136,19 +161,23 @@
 
 <div id="stage" style="display:none;">
     <img id="pageImg" alt="letter page">
-    <div id="sigHandle">
-        <img id="sigImg" src="/signature_basim.png" alt="signature">
+    <div id="handle-signature" class="elHandle" data-type="signature">
+        <img src="/signature_basim.png" alt="signature">
+    </div>
+    <div id="handle-date" class="elHandle" data-type="date" style="display:none;">
+        <img id="dateImg" alt="date">
     </div>
 </div>
 
-<div class="pagebar" id="togglebar" style="display:none;">
-    <button id="toggleSigBtn" onclick="toggleSignatureForPage()" style="flex:1;">🖊️ يوجد توقيع بهذه الصفحة</button>
+<div class="toggles" id="toggles" style="display:none;">
+    <button id="toggleSigBtn" onclick="toggleElement('signature')">🖊️ التوقيع</button>
+    <button id="toggleDateBtn" onclick="toggleElement('date')" style="display:none;">📅 التاريخ</button>
 </div>
 
 <div class="controls" id="controls" style="display:none;">
-    <button class="btn btn-smaller" onclick="resizeSig(0.9)">➖</button>
+    <button class="btn btn-smaller" onclick="resizeSelected(0.9)">➖</button>
     <button class="btn btn-confirm" onclick="confirmPlacement()">✅ تأكيد كل الصفحات</button>
-    <button class="btn btn-bigger" onclick="resizeSig(1.1)">➕</button>
+    <button class="btn btn-bigger" onclick="resizeSelected(1.1)">➕</button>
 </div>
 
 <div class="status" id="statusMsg"></div>
@@ -157,84 +186,120 @@
 const urlParams = new URLSearchParams(window.location.search);
 const requestId = urlParams.get('id') || '';
 
-const SIG_ASPECT = 638 / 1200; // نسبة أبعاد صورة التوقيع الأصلية
-const DEFAULT_WIDTH_PERCENT = 22;
-const DEFAULT_X_PERCENT = 15;
-const DEFAULT_Y_PERCENT = 55;
+const ASPECT = {
+    signature: 638 / 1200,   // نسبة أبعاد صورة التوقيع الأصلية
+    date: null,               // تُحسب من الصورة الفعلية بعد جلبها (تختلف حسب طول النص)
+};
+const DEFAULTS = {
+    signature: { x_percent: 15, y_percent: 55, width_percent: 22 },
+    date:      { x_percent: 8,  y_percent: 6,  width_percent: 16 },
+};
 
 let pageCount = 1;
 let currentPage = 0;
-let pageImages = []; // data URIs
-// كل عنصر: {x_percent, y_percent, width_percent} بالنسبة 0-100 (تُحوَّل إلى 0-1 عند الإرسال)
-let placements = [];
-let signatureEnabled = []; // true/false لكل صفحة — false = بدون توقيع بهذه الصفحة
+let pageImages = [];      // data URIs لكل صفحة
+let dateAvailable = false; // هل رفع البوت صورة تاريخ لهذا الطلب (فقط في تدفق الخطاب على المطبوعات)
+let selectedType = 'signature';
 
-function defaultPlacement() {
-    return { x_percent: DEFAULT_X_PERCENT, y_percent: DEFAULT_Y_PERCENT, width_percent: DEFAULT_WIDTH_PERCENT };
+// enabled[type][pageIndex] = bool ، placements[type][pageIndex] = {x_percent,y_percent,width_percent}
+const enabled = { signature: [], date: [] };
+const placements = { signature: [], date: [] };
+
+function handleEl(type) {
+    return document.getElementById(`handle-${type}`);
 }
 
-function layoutHandle() {
-    const handle = document.getElementById('sigHandle');
-    if (!signatureEnabled[currentPage]) {
+function layoutHandle(type) {
+    const handle = handleEl(type);
+    if (type === 'date' && !dateAvailable) {
+        handle.style.display = 'none';
+        return;
+    }
+    if (!enabled[type][currentPage]) {
         handle.style.display = 'none';
         return;
     }
     handle.style.display = 'block';
     const stage = document.getElementById('stage');
-    const p = placements[currentPage];
+    const p = placements[type][currentPage];
+    const aspect = ASPECT[type];
     const w = stage.clientWidth * (p.width_percent / 100);
-    const h = w * SIG_ASPECT;
+    const h = w * aspect;
     handle.style.width = w + 'px';
     handle.style.height = h + 'px';
     handle.style.left = (stage.clientWidth * (p.x_percent / 100)) + 'px';
     handle.style.top = (stage.clientHeight * (p.y_percent / 100)) + 'px';
 }
 
-function saveCurrentHandlePosition() {
-    if (!signatureEnabled[currentPage]) return;
+function layoutAllHandles() {
+    layoutHandle('signature');
+    layoutHandle('date');
+}
+
+function saveHandlePosition(type) {
+    if (type === 'date' && !dateAvailable) return;
+    if (!enabled[type][currentPage]) return;
     const stage = document.getElementById('stage');
-    const handle = document.getElementById('sigHandle');
+    const handle = handleEl(type);
     const stageRect = stage.getBoundingClientRect();
     const handleRect = handle.getBoundingClientRect();
     if (stageRect.width === 0) return;
-    placements[currentPage] = {
+    placements[type][currentPage] = {
         x_percent: ((handleRect.left - stageRect.left) / stageRect.width) * 100,
         y_percent: ((handleRect.top - stageRect.top) / stageRect.height) * 100,
         width_percent: (handleRect.width / stageRect.width) * 100,
     };
 }
 
-function resizeSig(factor) {
-    if (!signatureEnabled[currentPage]) return;
-    const p = placements[currentPage];
-    p.width_percent = Math.max(8, Math.min(60, p.width_percent * factor));
-    layoutHandle();
+function saveAllPositions() {
+    saveHandlePosition('signature');
+    saveHandlePosition('date');
 }
 
-function updateToggleUI(idx) {
-    const btn = document.getElementById('toggleSigBtn');
-    if (signatureEnabled[idx]) {
-        btn.textContent = '🖊️ يوجد توقيع بهذه الصفحة';
-        btn.style.background = '#334155';
+function resizeSelected(factor) {
+    const type = selectedType;
+    if (type === 'date' && !dateAvailable) return;
+    if (!enabled[type][currentPage]) return;
+    const p = placements[type][currentPage];
+    p.width_percent = Math.max(6, Math.min(60, p.width_percent * factor));
+    layoutHandle(type);
+}
+
+function selectElement(type) {
+    selectedType = type;
+    handleEl('signature').classList.toggle('selected', type === 'signature');
+    handleEl('date').classList.toggle('selected', type === 'date');
+}
+
+function updateToggleUI(type, idx) {
+    const btn = document.getElementById(type === 'signature' ? 'toggleSigBtn' : 'toggleDateBtn');
+    const label = type === 'signature' ? 'التوقيع' : 'التاريخ';
+    const icon = type === 'signature' ? '🖊️' : '📅';
+    if (enabled[type][idx]) {
+        btn.textContent = `${icon} ${label}`;
+        btn.classList.remove('off');
     } else {
-        btn.textContent = '🚫 بدون توقيع بهذه الصفحة';
-        btn.style.background = '#7f1d1d';
+        btn.textContent = `🚫 بدون ${label}`;
+        btn.classList.add('off');
     }
 }
 
-function toggleSignatureForPage() {
-    saveCurrentHandlePosition();
-    signatureEnabled[currentPage] = !signatureEnabled[currentPage];
-    if (signatureEnabled[currentPage] && !placements[currentPage]) {
-        placements[currentPage] = defaultPlacement();
+function toggleElement(type) {
+    if (type === 'date' && !dateAvailable) return;
+    saveHandlePosition(type);
+    enabled[type][currentPage] = !enabled[type][currentPage];
+    if (enabled[type][currentPage] && !placements[type][currentPage]) {
+        placements[type][currentPage] = { ...DEFAULTS[type] };
     }
-    updateToggleUI(currentPage);
-    layoutHandle();
+    selectElement(type);
+    updateToggleUI(type, currentPage);
+    layoutHandle(type);
 }
 
 function updatePageUI(idx) {
     document.getElementById('pageLabel').textContent = `صفحة ${idx + 1} من ${pageCount}`;
-    updateToggleUI(idx);
+    updateToggleUI('signature', idx);
+    if (dateAvailable) updateToggleUI('date', idx);
     document.getElementById('prevBtn').disabled = (idx === 0);
     document.getElementById('nextBtn').disabled = (idx === pageCount - 1);
 }
@@ -246,7 +311,7 @@ function showPage(idx) {
 }
 
 function goPage(delta) {
-    saveCurrentHandlePosition();
+    saveAllPositions();
     const newIdx = currentPage + delta;
     if (newIdx < 0 || newIdx >= pageCount) return;
     showPage(newIdx);
@@ -257,6 +322,15 @@ async function fetchKey(key) {
     const result = await resp.json();
     if (!result.success) return null;
     return result.data;
+}
+
+function loadImageAspect(src) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img.naturalHeight / img.naturalWidth);
+        img.onerror = () => resolve(0.3);
+        img.src = src;
+    });
 }
 
 async function init() {
@@ -278,8 +352,21 @@ async function init() {
             pageImages.push(pg ? pg.image_base64 : first.image_base64);
         }
 
-        placements = Array.from({ length: pageCount }, () => defaultPlacement());
-        signatureEnabled = Array.from({ length: pageCount }, () => true);
+        placements.signature = Array.from({ length: pageCount }, () => ({ ...DEFAULTS.signature }));
+        enabled.signature = Array.from({ length: pageCount }, () => true);
+
+        // صورة التاريخ اختيارية — تُرفع فقط من تدفق "خطاب على المطبوعات"، وليست من التوقيع المباشر
+        const dateData = await fetchKey(`letter_img:${requestId}:date`);
+        if (dateData) {
+            dateAvailable = true;
+            document.getElementById('dateImg').src = dateData.image_base64;
+            ASPECT.date = await loadImageAspect(dateData.image_base64);
+            placements.date = Array.from({ length: pageCount }, () => null);
+            enabled.date = Array.from({ length: pageCount }, () => false);
+            enabled.date[0] = true;
+            placements.date[0] = { ...DEFAULTS.date };
+            document.getElementById('toggleDateBtn').style.display = 'block';
+        }
 
         const img = document.getElementById('pageImg');
         let firstLoad = true;
@@ -289,12 +376,14 @@ async function init() {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('stage').style.display = 'block';
                 document.getElementById('controls').style.display = 'flex';
-                document.getElementById('togglebar').style.display = 'flex';
+                document.getElementById('toggles').style.display = 'flex';
                 document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
-                setupDrag(document.getElementById('sigHandle'), document.getElementById('stage'));
+                setupDrag('signature');
+                if (dateAvailable) setupDrag('date');
                 setupSwipe(document.getElementById('stage'));
+                selectElement('signature');
             }
-            layoutHandle();
+            layoutAllHandles();
         };
         img.src = pageImages[0];
         updatePageUI(0);
@@ -319,8 +408,8 @@ function setupSwipe(stage) {
         touchStartTarget = null;
 
         if (startX === null) return;
-        // تجاهل إذا كان اللمس بدأ على مقبض التوقيع نفسه (يُعامَل كسحب للتوقيع لا كتنقل بين الصفحات)
-        if (startTarget && startTarget.closest('#sigHandle')) return;
+        // تجاهل إذا كان اللمس بدأ على أحد المقابض (يُعامَل كسحب للعنصر لا كتنقل بين الصفحات)
+        if (startTarget && startTarget.closest('.elHandle')) return;
 
         const endX = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientX : null;
         if (endX === null) return;
@@ -333,7 +422,9 @@ function setupSwipe(stage) {
     }, { passive: true });
 }
 
-function setupDrag(handle, stage) {
+function setupDrag(type) {
+    const handle = handleEl(type);
+    const stage = document.getElementById('stage');
     let dragging = false;
     let offsetX = 0, offsetY = 0;
 
@@ -346,6 +437,7 @@ function setupDrag(handle, stage) {
 
     function start(e) {
         dragging = true;
+        selectElement(type);
         handle.classList.add('dragging');
         const p = getPoint(e);
         const rect = handle.getBoundingClientRect();
@@ -382,26 +474,34 @@ function setupDrag(handle, stage) {
 function showActionControls(show) {
     const display = show ? 'flex' : 'none';
     document.getElementById('controls').style.display = display;
-    document.getElementById('togglebar').style.display = display;
+    document.getElementById('toggles').style.display = display;
     document.getElementById('pagebar').style.display = show ? (pageCount > 1 ? 'flex' : 'none') : 'none';
 }
 
 async function confirmPlacement() {
-    saveCurrentHandlePosition();
+    saveAllPositions();
     showActionControls(false);
 
-    // تحويل النسب من 0-100 إلى 0-1 لكل صفحة — null = بدون توقيع بهذه الصفحة
-    const payloadPlacements = placements.map((p, i) => signatureEnabled[i] ? {
-        x_percent: p.x_percent / 100,
-        y_percent: p.y_percent / 100,
-        width_percent: p.width_percent / 100,
-    } : null);
+    function toUnitPercent(p) {
+        if (!p) return null;
+        return {
+            x_percent: p.x_percent / 100,
+            y_percent: p.y_percent / 100,
+            width_percent: p.width_percent / 100,
+        };
+    }
+
+    // كل صفحة: {signature: {...}|null, date: {...}|null}
+    const pages = Array.from({ length: pageCount }, (_, i) => ({
+        signature: enabled.signature[i] ? toUnitPercent(placements.signature[i]) : null,
+        date: (dateAvailable && enabled.date[i]) ? toUnitPercent(placements.date[i]) : null,
+    }));
 
     try {
         const resp = await fetch('/api/letter_place', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: requestId, placements: payloadPlacements })
+            body: JSON.stringify({ id: requestId, placements: pages })
         });
         const result = await resp.json();
         const statusEl = document.getElementById('statusMsg');
