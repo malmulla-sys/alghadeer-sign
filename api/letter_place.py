@@ -84,6 +84,7 @@ class handler(BaseHTTPRequestHandler):
 
             ok = _kv_set(f"letter_place:{request_id}", {
                 'placements': placements,
+                'template_key': data.get('template_key'),
                 'placed_at': int(time.time()),
             })
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>وضع التوقيع والتاريخ</title>
+    <title>صفحة التصميم — التوقيع</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -20,6 +20,29 @@
             text-align: center;
             font-size: 14px;
             padding: 6px;
+        }
+        .templatebar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            width: 100%;
+            max-width: 500px;
+            padding: 6px 0;
+        }
+        .templatebar button {
+            background: #334155;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .templatebar button.active {
+            background: #1e3a6e;
+            outline: 2px solid #38bdf8;
         }
         .pagebar {
             display: flex;
@@ -59,10 +82,19 @@
             background: #fff;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
-        #pageImg {
+        #bgImg {
             display: block;
             width: 100%;
             height: auto;
+            pointer-events: none;
+            user-select: none;
+        }
+        #contentImg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
             user-select: none;
         }
@@ -107,6 +139,28 @@
         .toggles button.off {
             background: #7f1d1d;
         }
+        .nudgebar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            max-width: 500px;
+            padding: 6px 0;
+            color: #fff;
+            font-size: 13px;
+        }
+        .nudgebar span {
+            white-space: nowrap;
+        }
+        .nudgebar button {
+            background: #334155;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 15px;
+            cursor: pointer;
+        }
         .controls {
             display: flex;
             gap: 10px;
@@ -149,9 +203,11 @@
 </head>
 <body>
 
-<div class="hint">اسحب التوقيع و/أو التاريخ لمكانهما في كل صفحة، كبّر/صغّر إذا لزم، ثم اضغط تأكيد</div>
+<div class="hint">اختر المطبوعات، فعّل التوقيع/التاريخ/الختم واسحبها لمكانها، واضبط موضع نص الخطاب إن لزم، ثم اضغط تأكيد</div>
 
 <div id="loading" class="loading">جاري تحميل المعاينة...</div>
+
+<div class="templatebar" id="templatebar" style="display:none;"></div>
 
 <div class="pagebar" id="pagebar" style="display:none;">
     <button id="prevBtn" onclick="goPage(-1)">◀ السابقة</button>
@@ -160,18 +216,32 @@
 </div>
 
 <div id="stage" style="display:none;">
-    <img id="pageImg" alt="letter page">
+    <img id="bgImg" alt="letterhead background">
+    <img id="contentImg" alt="letter content">
     <div id="handle-signature" class="elHandle" data-type="signature">
         <img src="/signature_basim.png" alt="signature">
     </div>
     <div id="handle-date" class="elHandle" data-type="date" style="display:none;">
         <img id="dateImg" alt="date">
     </div>
+    <div id="handle-stamp" class="elHandle" data-type="stamp" style="display:none;">
+        <img id="stampImg" alt="stamp">
+    </div>
 </div>
 
 <div class="toggles" id="toggles" style="display:none;">
     <button id="toggleSigBtn" onclick="toggleElement('signature')">🖊️ التوقيع</button>
     <button id="toggleDateBtn" onclick="toggleElement('date')" style="display:none;">📅 التاريخ</button>
+    <button id="toggleStampBtn" onclick="toggleElement('stamp')" style="display:none;">🔵 الختم</button>
+</div>
+
+<div class="nudgebar" id="nudgebar" style="display:none;">
+    <span>↔️ موضع النص:</span>
+    <button onclick="nudgeContent(0,-1)">⬆️</button>
+    <button onclick="nudgeContent(0,1)">⬇️</button>
+    <button onclick="nudgeContent(-1,0)">⬅️</button>
+    <button onclick="nudgeContent(1,0)">➡️</button>
+    <button onclick="resetContent()">↺</button>
 </div>
 
 <div class="controls" id="controls" style="display:none;">
@@ -189,21 +259,70 @@ const requestId = urlParams.get('id') || '';
 const ASPECT = {
     signature: 638 / 1200,   // نسبة أبعاد صورة التوقيع الأصلية
     date: null,               // تُحسب من الصورة الفعلية بعد جلبها (تختلف حسب طول النص)
+    stamp: null,              // تُحسب من صورة الختم الفعلية بعد جلبها
 };
 const DEFAULTS = {
     signature: { x_percent: 15, y_percent: 55, width_percent: 22 },
     date:      { x_percent: 8,  y_percent: 6,  width_percent: 16 },
+    stamp:     { x_percent: 38, y_percent: 52, width_percent: 16 },
 };
+const CONTENT_NUDGE_STEP = 0.5;  // % من عرض/ارتفاع الصفحة لكل ضغطة إزاحة
+const CONTENT_NUDGE_LIMIT = 30;  // أقصى إزاحة مسموحة (%) في أي اتجاه
 
-let pageCount = 1;
+let manifest = null;          // {page_count, default_template, templates:[{key,label,has_stamp}]}
+let currentTemplate = null;
 let currentPage = 0;
-let pageImages = [];      // data URIs لكل صفحة
-let dateAvailable = false; // هل رفع البوت صورة تاريخ لهذا الطلب (فقط في تدفق الخطاب على المطبوعات)
+let dateAvailable = false;    // تاريخ اليوم مستقل عن القالب — يُجلب مرة واحدة فقط
 let selectedType = 'signature';
 
-// enabled[type][pageIndex] = bool ، placements[type][pageIndex] = {x_percent,y_percent,width_percent}
-const enabled = { signature: [], date: [] };
-const placements = { signature: [], date: [] };
+const ASSET_CACHE = {};       // "bg:{tkey}" | "content:{tkey}:{page}" | "stamp:{tkey}" | "date" → data URI
+const STATE = {};             // STATE[tkey] = { enabled:{signature,date,stamp}, placements:{signature,date,stamp,content} }
+
+function curTemplateMeta() {
+    return (manifest.templates || []).find(t => t.key === currentTemplate) || null;
+}
+
+function currentHasStamp() {
+    const meta = curTemplateMeta();
+    return !!(meta && meta.has_stamp);
+}
+
+const OPTIONAL_TYPES = { date: () => dateAvailable, stamp: () => currentHasStamp() };
+const TYPE_META = {
+    signature: { icon: '🖊️', label: 'التوقيع', btnId: 'toggleSigBtn' },
+    date:      { icon: '📅', label: 'التاريخ',  btnId: 'toggleDateBtn' },
+    stamp:     { icon: '🔵', label: 'الختم',    btnId: 'toggleStampBtn' },
+};
+
+function isTypeUnavailable(type) {
+    const check = OPTIONAL_TYPES[type];
+    return check ? !check() : false;
+}
+
+function curEnabled() { return STATE[currentTemplate].enabled; }
+function curPlacements() { return STATE[currentTemplate].placements; }
+
+function ensureTemplateState(tkey) {
+    if (STATE[tkey]) return;
+    const n = manifest.page_count;
+    STATE[tkey] = {
+        enabled: {
+            signature: Array.from({ length: n }, () => true),
+            date:      Array.from({ length: n }, () => false),
+            stamp:     Array.from({ length: n }, () => false),
+        },
+        placements: {
+            signature: Array.from({ length: n }, () => ({ ...DEFAULTS.signature })),
+            date:      Array.from({ length: n }, () => null),
+            stamp:     Array.from({ length: n }, () => null),
+            content:   Array.from({ length: n }, () => ({ x_percent: 0, y_percent: 0 })),
+        },
+    };
+    if (dateAvailable) {
+        STATE[tkey].enabled.date[0] = true;
+        STATE[tkey].placements.date[0] = { ...DEFAULTS.date };
+    }
+}
 
 function handleEl(type) {
     return document.getElementById(`handle-${type}`);
@@ -211,17 +330,17 @@ function handleEl(type) {
 
 function layoutHandle(type) {
     const handle = handleEl(type);
-    if (type === 'date' && !dateAvailable) {
+    if (isTypeUnavailable(type)) {
         handle.style.display = 'none';
         return;
     }
-    if (!enabled[type][currentPage]) {
+    if (!curEnabled()[type][currentPage]) {
         handle.style.display = 'none';
         return;
     }
     handle.style.display = 'block';
     const stage = document.getElementById('stage');
-    const p = placements[type][currentPage];
+    const p = curPlacements()[type][currentPage];
     const aspect = ASPECT[type];
     const w = stage.clientWidth * (p.width_percent / 100);
     const h = w * aspect;
@@ -234,17 +353,38 @@ function layoutHandle(type) {
 function layoutAllHandles() {
     layoutHandle('signature');
     layoutHandle('date');
+    layoutHandle('stamp');
+}
+
+function layoutContent() {
+    const p = curPlacements().content[currentPage];
+    const stage = document.getElementById('stage');
+    const dx = stage.clientWidth * (p.x_percent / 100);
+    const dy = stage.clientHeight * (p.y_percent / 100);
+    document.getElementById('contentImg').style.transform = `translate(${dx}px, ${dy}px)`;
+}
+
+function nudgeContent(dxDir, dyDir) {
+    const p = curPlacements().content[currentPage];
+    p.x_percent = Math.max(-CONTENT_NUDGE_LIMIT, Math.min(CONTENT_NUDGE_LIMIT, p.x_percent + dxDir * CONTENT_NUDGE_STEP));
+    p.y_percent = Math.max(-CONTENT_NUDGE_LIMIT, Math.min(CONTENT_NUDGE_LIMIT, p.y_percent + dyDir * CONTENT_NUDGE_STEP));
+    layoutContent();
+}
+
+function resetContent() {
+    curPlacements().content[currentPage] = { x_percent: 0, y_percent: 0 };
+    layoutContent();
 }
 
 function saveHandlePosition(type) {
-    if (type === 'date' && !dateAvailable) return;
-    if (!enabled[type][currentPage]) return;
+    if (isTypeUnavailable(type)) return;
+    if (!curEnabled()[type][currentPage]) return;
     const stage = document.getElementById('stage');
     const handle = handleEl(type);
     const stageRect = stage.getBoundingClientRect();
     const handleRect = handle.getBoundingClientRect();
     if (stageRect.width === 0) return;
-    placements[type][currentPage] = {
+    curPlacements()[type][currentPage] = {
         x_percent: ((handleRect.left - stageRect.left) / stageRect.width) * 100,
         y_percent: ((handleRect.top - stageRect.top) / stageRect.height) * 100,
         width_percent: (handleRect.width / stageRect.width) * 100,
@@ -254,13 +394,14 @@ function saveHandlePosition(type) {
 function saveAllPositions() {
     saveHandlePosition('signature');
     saveHandlePosition('date');
+    saveHandlePosition('stamp');
 }
 
 function resizeSelected(factor) {
     const type = selectedType;
-    if (type === 'date' && !dateAvailable) return;
-    if (!enabled[type][currentPage]) return;
-    const p = placements[type][currentPage];
+    if (isTypeUnavailable(type)) return;
+    if (!curEnabled()[type][currentPage]) return;
+    const p = curPlacements()[type][currentPage];
     p.width_percent = Math.max(6, Math.min(60, p.width_percent * factor));
     layoutHandle(type);
 }
@@ -269,27 +410,28 @@ function selectElement(type) {
     selectedType = type;
     handleEl('signature').classList.toggle('selected', type === 'signature');
     handleEl('date').classList.toggle('selected', type === 'date');
+    handleEl('stamp').classList.toggle('selected', type === 'stamp');
 }
 
 function updateToggleUI(type, idx) {
-    const btn = document.getElementById(type === 'signature' ? 'toggleSigBtn' : 'toggleDateBtn');
-    const label = type === 'signature' ? 'التوقيع' : 'التاريخ';
-    const icon = type === 'signature' ? '🖊️' : '📅';
-    if (enabled[type][idx]) {
-        btn.textContent = `${icon} ${label}`;
+    const meta = TYPE_META[type];
+    const btn = document.getElementById(meta.btnId);
+    if (curEnabled()[type][idx]) {
+        btn.textContent = `${meta.icon} ${meta.label}`;
         btn.classList.remove('off');
     } else {
-        btn.textContent = `🚫 بدون ${label}`;
+        btn.textContent = `🚫 بدون ${meta.label}`;
         btn.classList.add('off');
     }
 }
 
 function toggleElement(type) {
-    if (type === 'date' && !dateAvailable) return;
+    if (isTypeUnavailable(type)) return;
     saveHandlePosition(type);
-    enabled[type][currentPage] = !enabled[type][currentPage];
-    if (enabled[type][currentPage] && !placements[type][currentPage]) {
-        placements[type][currentPage] = { ...DEFAULTS[type] };
+    const en = curEnabled();
+    en[type][currentPage] = !en[type][currentPage];
+    if (en[type][currentPage] && !curPlacements()[type][currentPage]) {
+        curPlacements()[type][currentPage] = { ...DEFAULTS[type] };
     }
     selectElement(type);
     updateToggleUI(type, currentPage);
@@ -297,24 +439,27 @@ function toggleElement(type) {
 }
 
 function updatePageUI(idx) {
-    document.getElementById('pageLabel').textContent = `صفحة ${idx + 1} من ${pageCount}`;
+    document.getElementById('pageLabel').textContent = `صفحة ${idx + 1} من ${manifest.page_count}`;
+    document.getElementById('toggleDateBtn').style.display = dateAvailable ? 'block' : 'none';
+    document.getElementById('toggleStampBtn').style.display = currentHasStamp() ? 'block' : 'none';
     updateToggleUI('signature', idx);
     if (dateAvailable) updateToggleUI('date', idx);
+    if (currentHasStamp()) updateToggleUI('stamp', idx);
     document.getElementById('prevBtn').disabled = (idx === 0);
-    document.getElementById('nextBtn').disabled = (idx === pageCount - 1);
+    document.getElementById('nextBtn').disabled = (idx === manifest.page_count - 1);
 }
 
-function showPage(idx) {
-    currentPage = idx;
-    document.getElementById('pageImg').src = pageImages[idx];
-    updatePageUI(idx);
-}
-
-function goPage(delta) {
-    saveAllPositions();
-    const newIdx = currentPage + delta;
-    if (newIdx < 0 || newIdx >= pageCount) return;
-    showPage(newIdx);
+function renderStage() {
+    document.getElementById('bgImg').src = ASSET_CACHE[`bg:${currentTemplate}`];
+    document.getElementById('contentImg').src = ASSET_CACHE[`content:${currentTemplate}:${currentPage}`];
+    if (currentHasStamp()) {
+        const stampB64 = ASSET_CACHE[`stamp:${currentTemplate}`];
+        if (stampB64) document.getElementById('stampImg').src = stampB64;
+    }
+    highlightTemplateBar();
+    updatePageUI(currentPage);
+    layoutContent();
+    layoutAllHandles();
 }
 
 async function fetchKey(key) {
@@ -322,6 +467,30 @@ async function fetchKey(key) {
     const result = await resp.json();
     if (!result.success) return null;
     return result.data;
+}
+
+async function getAsset(assetKey) {
+    if (ASSET_CACHE[assetKey] !== undefined) return ASSET_CACHE[assetKey];
+    const data = await fetchKey(`letter_img:${requestId}:${assetKey}`);
+    const value = data ? data.image_base64 : null;
+    ASSET_CACHE[assetKey] = value;
+    return value;
+}
+
+async function ensureTemplatePageAssets(tkey, page) {
+    const tasks = [getAsset(`bg:${tkey}`), getAsset(`content:${tkey}:${page}`)];
+    const meta = (manifest.templates || []).find(t => t.key === tkey);
+    if (meta && meta.has_stamp) tasks.push(getAsset(`stamp:${tkey}`));
+    await Promise.all(tasks);
+}
+
+async function prefetchAll() {
+    for (const t of manifest.templates) {
+        for (let p = 0; p < manifest.page_count; p++) {
+            if (t.key === currentTemplate && p === currentPage) continue;  // مُحمّل مسبقاً
+            await ensureTemplatePageAssets(t.key, p);
+        }
+    }
 }
 
 function loadImageAspect(src) {
@@ -333,60 +502,99 @@ function loadImageAspect(src) {
     });
 }
 
+function buildTemplateBar() {
+    const bar = document.getElementById('templatebar');
+    bar.innerHTML = '';
+    manifest.templates.forEach(t => {
+        const btn = document.createElement('button');
+        btn.textContent = t.label;
+        btn.dataset.key = t.key;
+        btn.onclick = () => switchTemplate(t.key);
+        bar.appendChild(btn);
+    });
+    highlightTemplateBar();
+}
+
+function highlightTemplateBar() {
+    document.getElementById('templatebar').querySelectorAll('button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.key === currentTemplate);
+    });
+}
+
+async function switchTemplate(tkey) {
+    if (tkey === currentTemplate) return;
+    saveAllPositions();
+    currentTemplate = tkey;
+    ensureTemplateState(tkey);
+    highlightTemplateBar();
+    await ensureTemplatePageAssets(tkey, currentPage);
+    renderStage();
+}
+
+async function goPage(delta) {
+    saveAllPositions();
+    const newIdx = currentPage + delta;
+    if (newIdx < 0 || newIdx >= manifest.page_count) return;
+    currentPage = newIdx;
+    await ensureTemplatePageAssets(currentTemplate, currentPage);
+    renderStage();
+}
+
 async function init() {
     if (!requestId) {
         document.getElementById('loading').textContent = 'رابط غير صالح.';
         return;
     }
     try {
-        const first = await fetchKey(`letter_img:${requestId}:0`);
-        if (!first) {
+        const metaData = await fetchKey(`letter_img:${requestId}:meta`);
+        if (!metaData || !metaData.image_base64) {
             document.getElementById('loading').textContent = 'تعذر تحميل المعاينة. أعد إرسال الملف من البوت.';
             return;
         }
-        pageCount = first.page_count || 1;
-        pageImages = [first.image_base64];
-
-        for (let i = 1; i < pageCount; i++) {
-            const pg = await fetchKey(`letter_img:${requestId}:${i}`);
-            pageImages.push(pg ? pg.image_base64 : first.image_base64);
+        manifest = JSON.parse(metaData.image_base64);
+        if (!manifest.templates || !manifest.templates.length) {
+            document.getElementById('loading').textContent = 'تعذر تجهيز أي قالب. أعد إرسال الملف من البوت.';
+            return;
         }
+        const wantDefault = manifest.templates.find(t => t.key === manifest.default_template);
+        currentTemplate = wantDefault ? wantDefault.key : manifest.templates[0].key;
 
-        placements.signature = Array.from({ length: pageCount }, () => ({ ...DEFAULTS.signature }));
-        enabled.signature = Array.from({ length: pageCount }, () => true);
-
-        // صورة التاريخ اختيارية — تُرفع فقط من تدفق "خطاب على المطبوعات"، وليست من التوقيع المباشر
-        const dateData = await fetchKey(`letter_img:${requestId}:date`);
-        if (dateData) {
+        // تاريخ اليوم — اختياري، مستقل عن القالب، يُجلب مرة واحدة فقط
+        const dateB64 = await getAsset('date');
+        if (dateB64) {
             dateAvailable = true;
-            document.getElementById('dateImg').src = dateData.image_base64;
-            ASPECT.date = await loadImageAspect(dateData.image_base64);
-            placements.date = Array.from({ length: pageCount }, () => null);
-            enabled.date = Array.from({ length: pageCount }, () => false);
-            enabled.date[0] = true;
-            placements.date[0] = { ...DEFAULTS.date };
-            document.getElementById('toggleDateBtn').style.display = 'block';
+            document.getElementById('dateImg').src = dateB64;
+            ASPECT.date = await loadImageAspect(dateB64);
         }
 
-        const img = document.getElementById('pageImg');
+        buildTemplateBar();
+        ensureTemplateState(currentTemplate);
+        await ensureTemplatePageAssets(currentTemplate, currentPage);
+
+        const bgImgEl = document.getElementById('bgImg');
         let firstLoad = true;
-        img.onload = () => {
+        bgImgEl.onload = () => {
             if (firstLoad) {
                 firstLoad = false;
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('stage').style.display = 'block';
                 document.getElementById('controls').style.display = 'flex';
                 document.getElementById('toggles').style.display = 'flex';
-                document.getElementById('pagebar').style.display = pageCount > 1 ? 'flex' : 'none';
+                document.getElementById('nudgebar').style.display = 'flex';
+                document.getElementById('templatebar').style.display = 'flex';
+                document.getElementById('pagebar').style.display = manifest.page_count > 1 ? 'flex' : 'none';
                 setupDrag('signature');
-                if (dateAvailable) setupDrag('date');
+                setupDrag('date');
+                setupDrag('stamp');
                 setupSwipe(document.getElementById('stage'));
                 selectElement('signature');
             }
             layoutAllHandles();
+            layoutContent();
         };
-        img.src = pageImages[0];
-        updatePageUI(0);
+        renderStage();
+
+        prefetchAll();  // تحضير مسبق صامت لبقية القوالب/الصفحات — لا يحجب الواجهة
     } catch (e) {
         document.getElementById('loading').textContent = 'خطأ في الاتصال بالخادم.';
     }
@@ -475,7 +683,9 @@ function showActionControls(show) {
     const display = show ? 'flex' : 'none';
     document.getElementById('controls').style.display = display;
     document.getElementById('toggles').style.display = display;
-    document.getElementById('pagebar').style.display = show ? (pageCount > 1 ? 'flex' : 'none') : 'none';
+    document.getElementById('nudgebar').style.display = display;
+    document.getElementById('templatebar').style.display = show ? 'flex' : 'none';
+    document.getElementById('pagebar').style.display = show ? (manifest.page_count > 1 ? 'flex' : 'none') : 'none';
 }
 
 async function confirmPlacement() {
@@ -487,21 +697,29 @@ async function confirmPlacement() {
         return {
             x_percent: p.x_percent / 100,
             y_percent: p.y_percent / 100,
-            width_percent: p.width_percent / 100,
+            width_percent: p.width_percent != null ? p.width_percent / 100 : null,
         };
     }
+    function contentToUnitPercent(p) {
+        if (!p) return null;
+        return { x_percent: p.x_percent / 100, y_percent: p.y_percent / 100 };
+    }
 
-    // كل صفحة: {signature: {...}|null, date: {...}|null}
-    const pages = Array.from({ length: pageCount }, (_, i) => ({
-        signature: enabled.signature[i] ? toUnitPercent(placements.signature[i]) : null,
-        date: (dateAvailable && enabled.date[i]) ? toUnitPercent(placements.date[i]) : null,
+    const ce = curEnabled();
+    const cp = curPlacements();
+    // كل صفحة: {signature: {...}|null, date: {...}|null, stamp: {...}|null, content: {...}|null}
+    const pages = Array.from({ length: manifest.page_count }, (_, i) => ({
+        signature: ce.signature[i] ? toUnitPercent(cp.signature[i]) : null,
+        date: (dateAvailable && ce.date[i]) ? toUnitPercent(cp.date[i]) : null,
+        stamp: (currentHasStamp() && ce.stamp[i]) ? toUnitPercent(cp.stamp[i]) : null,
+        content: contentToUnitPercent(cp.content[i]),
     }));
 
     try {
         const resp = await fetch('/api/letter_place', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: requestId, placements: pages })
+            body: JSON.stringify({ id: requestId, placements: pages, template_key: currentTemplate })
         });
         const result = await resp.json();
         const statusEl = document.getElementById('statusMsg');
