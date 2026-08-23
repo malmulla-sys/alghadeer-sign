@@ -461,37 +461,77 @@
             });
         }
 
-        function loadReceiptData() {
-            // قراءة البيانات من URL
-            const urlParams = new URLSearchParams(window.location.search);
+        // تُملأ من fetchReceiptFromServer() لما يكون الرابط قصيراً (id فقط) — يحتاجها
+        // submitSignature لاحقاً لأن urlParams نفسه ما فيه هالحقول بهذا المسار
+        let fetchedProxyName = '';
+        let fetchedProxyNationalId = '';
 
-            const receiptNo = urlParams.get('receipt_no') || '---';
-            const beneficiaryName = urlParams.get('beneficiary_name') || '---';
-            const nationalId = urlParams.get('national_id') || '---';
-            const amount = urlParams.get('amount') || '0';
-            const subject = urlParams.get('subject') || '---';
-            const receiptDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
-            const proxyName = urlParams.get('proxy_name') || '';
-            const proxyNationalId = urlParams.get('proxy_national_id') || '';
+        function applyReceiptFields(f) {
+            document.getElementById('receiptNo').textContent = f.receiptNo || '---';
+            document.getElementById('beneficiaryName').textContent = f.beneficiaryName || '---';
+            document.getElementById('nationalId').textContent = f.nationalId || '---';
+            document.getElementById('amount').textContent = f.amount || '0';
+            document.getElementById('subject').textContent = f.subject || '---';
+            document.getElementById('receiptDate').textContent = f.receiptDate || new Date().toISOString().split('T')[0];
 
-            // تحديث العناصر في الصفحة
-            document.getElementById('receiptNo').textContent = receiptNo;
-            document.getElementById('beneficiaryName').textContent = beneficiaryName;
-            document.getElementById('nationalId').textContent = nationalId;
-            document.getElementById('amount').textContent = amount;
-            document.getElementById('subject').textContent = subject;
-            document.getElementById('receiptDate').textContent = receiptDate;
-
-            // عرض بيانات المندوب إن وجدت
-            if (proxyName) {
+            if (f.proxyName) {
                 document.getElementById('proxyRow').style.display = 'flex';
-                document.getElementById('proxyName').textContent = proxyName;
-                document.getElementById('proxyNationalId').textContent = proxyNationalId || '---';
+                document.getElementById('proxyName').textContent = f.proxyName;
+                document.getElementById('proxyNationalId').textContent = f.proxyNationalId || '---';
+            }
+        }
+
+        function loadReceiptData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const receiptId = urlParams.get('id') || '';
+
+            // رابط طويل (تابلت/قائمة الطلبات المشتركة) — كل الحقول موجودة بالرابط مباشرة
+            if (urlParams.get('beneficiary_name')) {
+                applyReceiptFields({
+                    receiptNo: urlParams.get('receipt_no'),
+                    beneficiaryName: urlParams.get('beneficiary_name'),
+                    nationalId: urlParams.get('national_id'),
+                    amount: urlParams.get('amount'),
+                    subject: urlParams.get('subject'),
+                    receiptDate: urlParams.get('date'),
+                    proxyName: urlParams.get('proxy_name') || '',
+                    proxyNationalId: urlParams.get('proxy_national_id') || '',
+                });
+                return;
             }
 
-            // إذا لا توجد بيانات، عرض رسالة
-            if (!urlParams.get('id') && !urlParams.get('receipt_no')) {
-                console.log('No receipt data in URL - using demo data');
+            // رابط قصير (id فقط، مسار واتساب/OTP) — نجلب بيانات السند من الخادم
+            if (receiptId) {
+                fetch('/api/sign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'get_receipt', id: receiptId })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success && result.data) {
+                        const d = result.data;
+                        fetchedProxyName = d.proxy_name || '';
+                        fetchedProxyNationalId = d.proxy_national_id || '';
+                        applyReceiptFields({
+                            receiptNo: d.receipt_no,
+                            beneficiaryName: d.beneficiary_name,
+                            nationalId: d.national_id,
+                            amount: d.amount,
+                            subject: d.subject,
+                            receiptDate: d.date,
+                            proxyName: fetchedProxyName,
+                            proxyNationalId: fetchedProxyNationalId,
+                        });
+                    } else {
+                        document.getElementById('errorMessage').textContent = 'تعذر جلب بيانات السند — الرابط منتهي الصلاحية';
+                        document.getElementById('errorStatus').classList.add('show');
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('errorMessage').textContent = 'فشل الاتصال بالخادم';
+                    document.getElementById('errorStatus').classList.add('show');
+                });
             }
         }
 
@@ -651,8 +691,8 @@
                 amount: document.getElementById('amount').textContent,
                 subject: document.getElementById('subject').textContent,
                 date: document.getElementById('receiptDate').textContent,
-                proxy_name: urlParams.get('proxy_name') || '',
-                proxy_national_id: urlParams.get('proxy_national_id') || '',
+                proxy_name: urlParams.get('proxy_name') || fetchedProxyName,
+                proxy_national_id: urlParams.get('proxy_national_id') || fetchedProxyNationalId,
                 signature: signatureData,
                 signed_at: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Riyadh' }).replace(' ', 'T'),
                 otp_code: verifiedOtpCode

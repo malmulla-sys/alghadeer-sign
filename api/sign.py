@@ -53,6 +53,14 @@ class handler(BaseHTTPRequestHandler):
             if mode == 'verify_otp':
                 self.wfile.write(json.dumps(handle_verify_otp(data)).encode('utf-8'))
                 return
+            if mode == 'set_receipt':
+                auth_header = self.headers.get('Authorization', '')
+                token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+                self.wfile.write(json.dumps(handle_set_receipt(data, token)).encode('utf-8'))
+                return
+            if mode == 'get_receipt':
+                self.wfile.write(json.dumps(handle_get_receipt(data)).encode('utf-8'))
+                return
 
             # استخراج البيانات
             receipt_no = data.get('receipt_no', '')
@@ -239,6 +247,62 @@ def handle_verify_otp(data: dict) -> dict:
         pass
 
     return {'success': False, 'error': 'wrong_code'}
+
+
+def handle_set_receipt(data: dict, token: str) -> dict:
+    """يخزّن بيانات سند كاملة في KV باسم receipt:{id} — يسمح بإرسال رابط قصير
+    (id فقط) للمستفيد بدل تمرير كل الحقول (خصوصاً العربي) داخل رابط طويل جداً.
+    بوت فقط (Bearer SIGNATURE_BOT_API_KEY)."""
+    if token != BOT_API_KEY:
+        return {'success': False, 'error': 'unauthorized'}
+
+    receipt_id = str(data.get('id', '')).strip()
+    receipt_payload = data.get('data')
+    ttl_seconds = int(data.get('ttl_seconds', 3600))
+
+    if not receipt_id or not isinstance(receipt_payload, dict):
+        return {'success': False, 'error': 'missing id or data'}
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return {'success': False, 'error': 'KV not configured'}
+
+    try:
+        payload = json.dumps(receipt_payload, ensure_ascii=False).encode('utf-8')
+        kv_url = f"{KV_REST_API_URL}/set/receipt:{receipt_id}?EX={ttl_seconds}"
+        kv_req = urllib.request.Request(kv_url, data=payload, method='POST')
+        kv_req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        kv_req.add_header('Content-Type', 'application/json')
+        urllib.request.urlopen(kv_req, timeout=10)
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def handle_get_receipt(data: dict) -> dict:
+    """يجلب بيانات سند مُخزَّنة عبر handle_set_receipt — تستخدمها صفحة التوقيع لما
+    يوصلها id فقط بالرابط (بدون بقية الحقول) لتعرض بيانات السند الحقيقية."""
+    receipt_id = str(data.get('id', '')).strip()
+    if not receipt_id:
+        return {'success': False, 'error': 'missing_id'}
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return {'success': False, 'error': 'kv_not_configured'}
+
+    try:
+        url = f"{KV_REST_API_URL}/get/receipt:{receipt_id}"
+        req = urllib.request.Request(url)
+        req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result_data = json.loads(resp.read().decode())
+            result = result_data.get('result')
+            record = json.loads(result) if result else None
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+    if not record:
+        return {'success': False, 'error': 'not_found'}
+
+    return {'success': True, 'data': record}
 
 
 def send_signature_to_bot(data: dict) -> bool:
