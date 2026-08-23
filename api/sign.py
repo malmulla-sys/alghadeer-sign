@@ -13,9 +13,13 @@ import urllib.parse
 # Telegram Bot Token (set in Vercel environment variables)
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 ADMIN_CHAT_ID = os.environ.get('ADMIN_CHAT_ID', '')
+BOT_API_KEY = os.environ.get('SIGNATURE_BOT_API_KEY', 'bot-secret-key-2026')
+KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
+KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN', '')
 
 # توقيت الرياض (UTC+3)
 RIYADH_TZ = timezone(timedelta(hours=3))
+OTP_MAX_ATTEMPTS = 5
 
 
 class handler(BaseHTTPRequestHandler):
@@ -37,6 +41,18 @@ class handler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
             data = json.loads(body.decode('utf-8'))
+
+            # طلبات OTP (تخزين/تحقق) مُدمَجة بنفس هذا الملف لتفادي تجاوز حد عدد
+            # الـ Serverless Functions المسموح به على خطة Vercel — بدل ملفات منفصلة
+            mode = data.get('mode', 'sign')
+            if mode == 'set_otp':
+                auth_header = self.headers.get('Authorization', '')
+                token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+                self.wfile.write(json.dumps(handle_set_otp(data, token)).encode('utf-8'))
+                return
+            if mode == 'verify_otp':
+                self.wfile.write(json.dumps(handle_verify_otp(data)).encode('utf-8'))
+                return
 
             # استخراج البيانات
             receipt_no = data.get('receipt_no', '')
@@ -150,6 +166,79 @@ def check_and_consume_otp(request_id: str, otp_code: str) -> tuple[bool, str]:
         pass
 
     return True, ''
+
+
+def handle_set_otp(data: dict, token: str) -> dict:
+    """يخزّن رمز OTP لسند مُرسَل عن بُعد — بوت فقط (Bearer SIGNATURE_BOT_API_KEY)."""
+    if token != BOT_API_KEY:
+        return {'success': False, 'error': 'unauthorized'}
+
+    otp_id = str(data.get('id', '')).strip()
+    code = str(data.get('code', '')).strip()
+    ttl_seconds = int(data.get('ttl_seconds', 600))
+
+    if not otp_id or not code:
+        return {'success': False, 'error': 'missing id or code'}
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return {'success': False, 'error': 'KV not configured'}
+
+    try:
+        payload = json.dumps({'code': code, 'attempts': 0}).encode('utf-8')
+        kv_url = f"{KV_REST_API_URL}/set/otp:{otp_id}?EX={ttl_seconds}"
+        kv_req = urllib.request.Request(kv_url, data=payload, method='POST')
+        kv_req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        kv_req.add_header('Content-Type', 'application/json')
+        urllib.request.urlopen(kv_req, timeout=10)
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def handle_verify_otp(data: dict) -> dict:
+    """يتحقق (بدون استهلاك) من رمز OTP لعرض لوحة التوقيع — بوابة تجربة استخدام فقط؛
+    التحقق السيادي المُستهلِك للرمز يحصل عند التوقيع الفعلي (check_and_consume_otp)."""
+    otp_id = str(data.get('id', '')).strip()
+    submitted_code = str(data.get('code', '')).strip()
+
+    if not otp_id or not submitted_code:
+        return {'success': False, 'error': 'missing_fields'}
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN:
+        return {'success': False, 'error': 'kv_not_configured'}
+
+    try:
+        url = f"{KV_REST_API_URL}/get/otp:{otp_id}"
+        req = urllib.request.Request(url)
+        req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result_data = json.loads(resp.read().decode())
+            result = result_data.get('result')
+            record = json.loads(result) if result else None
+    except Exception:
+        record = None
+
+    if not record:
+        return {'success': False, 'error': 'expired'}
+
+    attempts = int(record.get('attempts', 0))
+    if attempts >= OTP_MAX_ATTEMPTS:
+        return {'success': False, 'error': 'too_many_attempts'}
+
+    if submitted_code == record.get('code'):
+        return {'success': True}
+
+    record['attempts'] = attempts + 1
+    try:
+        upd_url = f"{KV_REST_API_URL}/set/otp:{otp_id}?XX=true&KEEPTTL=true"
+        upd_req = urllib.request.Request(upd_url, data=json.dumps(record).encode('utf-8'), method='POST')
+        upd_req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        upd_req.add_header('Content-Type', 'application/json')
+        urllib.request.urlopen(upd_req, timeout=10)
+    except Exception:
+        pass
+
+    return {'success': False, 'error': 'wrong_code'}
 
 
 def send_signature_to_bot(data: dict) -> bool:

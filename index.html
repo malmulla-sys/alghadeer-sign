@@ -429,10 +429,10 @@
             btn.disabled = true;
             btn.textContent = '⏳ جاري التحقق...';
 
-            fetch('/api/verify_otp', {
+            fetch('/api/sign', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: receiptId, code: code })
+                body: JSON.stringify({ mode: 'verify_otp', id: receiptId, code: code })
             })
             .then(response => response.json())
             .then(data => {

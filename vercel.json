@@ -77,14 +77,6 @@
       "dest": "/api/wa_webhook.py"
     },
     {
-      "src": "/api/set_otp",
-      "dest": "/api/set_otp.py"
-    },
-    {
-      "src": "/api/verify_otp",
-      "dest": "/api/verify_otp.py"
-    },
-    {
       "src": "/requests",
       "dest": "/requests.html"
     },
