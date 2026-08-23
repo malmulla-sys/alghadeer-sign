@@ -239,6 +239,63 @@
             font-size: 12px;
             color: #92400e;
         }
+
+        .otp-gate {
+            padding: 30px 24px;
+            text-align: center;
+        }
+
+        .otp-gate p {
+            color: #374151;
+            font-size: 14px;
+            margin-bottom: 18px;
+            line-height: 1.6;
+        }
+
+        .otp-input {
+            width: 100%;
+            font-size: 26px;
+            letter-spacing: 8px;
+            text-align: center;
+            padding: 14px;
+            border: 2px solid #d1d5db;
+            border-radius: 10px;
+            direction: ltr;
+            margin-bottom: 14px;
+        }
+
+        .otp-input:focus {
+            outline: none;
+            border-color: #1e3a6e;
+        }
+
+        .otp-error {
+            color: #dc2626;
+            font-size: 13px;
+            margin-bottom: 12px;
+            min-height: 18px;
+        }
+
+        .otp-verify-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #1e3a6e 0%, #2c5282 100%);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .otp-verify-btn:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+        }
+
+        .hidden-section {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -249,7 +306,14 @@
                 <h1>سند استلام</h1>
             </div>
 
-            <div class="receipt-info">
+            <div class="otp-gate" id="otpGate" style="display:none;">
+                <p>🔒 هذا السند مرسَل عن بُعد.<br>أدخل رمز التحقق اللي وصلك على واتساب لعرض السند والتوقيع عليه.</p>
+                <input type="tel" inputmode="numeric" maxlength="6" class="otp-input" id="otpInput" placeholder="000000">
+                <div class="otp-error" id="otpError"></div>
+                <button class="otp-verify-btn" id="otpVerifyBtn" onclick="verifyOtp()">✅ تحقق ومتابعة</button>
+            </div>
+
+            <div class="receipt-info" id="receiptInfoSection">
                 <div class="info-row">
                     <span class="info-label">رقم السند</span>
                     <span class="info-value" id="receiptNo">2026-0512</span>
@@ -277,13 +341,13 @@
                 </div>
             </div>
 
-            <div class="amount-box">
+            <div class="amount-box" id="amountBoxSection">
                 <div class="amount-label">المبلغ المستلم</div>
                 <div class="amount-value" id="amount">2,500</div>
                 <div style="font-size: 14px; margin-top: 4px;">ريال سعودي</div>
             </div>
 
-            <div class="signature-section">
+            <div class="signature-section" id="signatureSection">
                 <div class="signature-title">وقّع في المربع أدناه بالفأرة أو الإصبع</div>
                 <div class="signature-container">
                     <canvas id="signatureCanvas"></canvas>
@@ -328,12 +392,74 @@
         let hasSignature = false;
         let lastX = 0;
         let lastY = 0;
+        let verifiedOtpCode = '';
 
         // Initialize when page loads
         window.onload = function() {
             setupCanvas();
             loadReceiptData();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('otp') === '1') {
+                document.getElementById('receiptInfoSection').classList.add('hidden-section');
+                document.getElementById('amountBoxSection').classList.add('hidden-section');
+                document.getElementById('signatureSection').classList.add('hidden-section');
+                document.getElementById('buttonsSection').classList.add('hidden-section');
+                document.getElementById('otpGate').style.display = 'block';
+                document.getElementById('otpInput').focus();
+                document.getElementById('otpInput').addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') verifyOtp();
+                });
+            }
         };
+
+        function verifyOtp() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const receiptId = urlParams.get('id') || '';
+            const code = document.getElementById('otpInput').value.trim();
+            const errorEl = document.getElementById('otpError');
+            const btn = document.getElementById('otpVerifyBtn');
+
+            errorEl.textContent = '';
+            if (!code) {
+                errorEl.textContent = 'أدخل رمز التحقق أولاً';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ جاري التحقق...';
+
+            fetch('/api/verify_otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: receiptId, code: code })
+            })
+            .then(response => response.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.textContent = '✅ تحقق ومتابعة';
+                if (data.success) {
+                    verifiedOtpCode = code;
+                    document.getElementById('otpGate').style.display = 'none';
+                    document.getElementById('receiptInfoSection').classList.remove('hidden-section');
+                    document.getElementById('amountBoxSection').classList.remove('hidden-section');
+                    document.getElementById('signatureSection').classList.remove('hidden-section');
+                    document.getElementById('buttonsSection').classList.remove('hidden-section');
+                } else {
+                    const errors = {
+                        'wrong_code': 'رمز التحقق غير صحيح، حاول مرة أخرى',
+                        'expired': 'انتهت صلاحية الرابط، اطلب رابطاً جديداً',
+                        'too_many_attempts': 'عدد محاولات كبير، اطلب رابطاً جديداً',
+                    };
+                    errorEl.textContent = errors[data.error] || 'تعذر التحقق من الرمز';
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.textContent = '✅ تحقق ومتابعة';
+                errorEl.textContent = 'فشل الاتصال بالخادم';
+            });
+        }
 
         function loadReceiptData() {
             // قراءة البيانات من URL
@@ -528,7 +654,8 @@
                 proxy_name: urlParams.get('proxy_name') || '',
                 proxy_national_id: urlParams.get('proxy_national_id') || '',
                 signature: signatureData,
-                signed_at: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Riyadh' }).replace(' ', 'T')
+                signed_at: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Riyadh' }).replace(' ', 'T'),
+                otp_code: verifiedOtpCode
             };
 
             // Send to API

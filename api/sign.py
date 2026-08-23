@@ -57,6 +57,17 @@ class handler(BaseHTTPRequestHandler):
             # حفظ التوقيع في KV + السجل + حذف من الانتظار (بغض النظر عن نجاح الإشعار)
             request_id = data.get('receipt_id') or data.get('id', '')
 
+            # التحقق النهائي من رمز OTP (لو هذا السند يتطلبه) — تحقق سيادي بغض النظر
+            # عن أي تحقق سبق في الواجهة، ويستهلك الرمز (حذف بعد أول نجاح) لمنع إعادة الاستخدام
+            otp_code = data.get('otp_code', '')
+            otp_ok, otp_error = check_and_consume_otp(request_id, otp_code)
+            if not otp_ok:
+                self.wfile.write(json.dumps({
+                    'success': False,
+                    'error': otp_error
+                }, ensure_ascii=False).encode('utf-8'))
+                return
+
             # 1. حفظ في KV
             try:
                 send_signature_to_bot(data)  # هذا يحفظ في KV
@@ -99,6 +110,46 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({'success': False, 'error': str(e)}).encode())
+
+
+def check_and_consume_otp(request_id: str, otp_code: str) -> tuple[bool, str]:
+    """يتحقق من رمز OTP لسند مُرسَل عن بُعد (واتساب) ويستهلكه (يحذفه) عند النجاح.
+    لو ما فيه رمز OTP مخزّن لهذا السند أصلاً (المسار العادي: تابلت/قائمة الطلبات المشتركة)
+    يمر التوقيع بدون أي تحقق — توافقية كاملة مع التدفق الحالي."""
+    KV_REST_API_URL = os.environ.get('KV_REST_API_URL', '')
+    KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN', '')
+
+    if not KV_REST_API_URL or not KV_REST_API_TOKEN or not request_id:
+        return True, ''
+
+    try:
+        url = f"{KV_REST_API_URL}/get/otp:{request_id}"
+        req = urllib.request.Request(url)
+        req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result_data = json.loads(resp.read().decode())
+            result = result_data.get('result')
+            record = json.loads(result) if result else None
+    except Exception:
+        record = None
+
+    if not record:
+        # لا يوجد رمز مخزّن لهذا السند — مسار عادي (تابلت)، لا حاجة لتحقق
+        return True, ''
+
+    if str(otp_code) != str(record.get('code', '')):
+        return False, 'رمز التحقق غير صحيح'
+
+    # استهلاك الرمز فوراً بعد نجاح التحقق لمنع إعادة استخدامه
+    try:
+        del_url = f"{KV_REST_API_URL}/del/otp:{request_id}"
+        del_req = urllib.request.Request(del_url, method='POST')
+        del_req.add_header('Authorization', f'Bearer {KV_REST_API_TOKEN}')
+        urllib.request.urlopen(del_req, timeout=10)
+    except Exception:
+        pass
+
+    return True, ''
 
 
 def send_signature_to_bot(data: dict) -> bool:
