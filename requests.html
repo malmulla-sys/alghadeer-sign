@@ -160,6 +160,17 @@
             color: #7a5b00;
         }
 
+        .proxy-note {
+            background: #e8f5e9;
+            border-right: 3px solid #2e7d32;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #1b5e20;
+            margin-bottom: 10px;
+        }
+
         .delete-btn {
             margin-top: 10px;
             padding: 8px 16px;
@@ -735,6 +746,7 @@
                                 </span>
                                 <span class="request-amount">${req.amount} ريال</span>
                             </div>
+                            ${req.proxy_name ? `<div class="proxy-note">🤝 سيستلم بالنيابة: ${req.proxy_name}</div>` : ''}
                             <div class="request-details">
                                 <span class="request-detail">📄 ${req.receipt_no}</span>
                                 <span class="request-detail">🆔 ${req.national_id}</span>
