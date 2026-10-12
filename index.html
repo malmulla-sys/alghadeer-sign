@@ -325,8 +325,45 @@ img.wordmark{ height:46px; width:auto; max-width:min(72vw,260px); display:block;
 #proxyRow span{ color:#9fd3db !important; }
 .amount-box{ background:var(--green-tint) !important; color:var(--green-mid) !important; border:1px solid rgba(58,168,126,.35); }
 .signature-title{ color:var(--text) !important; }
-/* خانة التوقيع تبقى بيضاء: التوقيع يُحفظ حبراً داكناً على أبيض في السند */
-.signature-container{ border-color:var(--border) !important; background:#fff !important; }
+/* ═══ صفحة كاملة + خانة توقيع كبيرة ═══ */
+body{ padding:0 !important; }
+.container{ max-width:none !important; margin:0 !important; min-height:100vh; display:flex; flex-direction:column; }
+.card{ flex:1; border-radius:0 !important; border:0 !important; display:flex; flex-direction:column; }
+.header{ padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px !important; }
+.header h1{ font-size:20px; }
+.receipt-info{ padding:12px 18px !important; }
+.info-row{ padding:8px 0 !important; }
+.info-label{ font-size:14px !important; }
+.info-value{ font-size:16px !important; }
+.amount-box{ margin:4px 18px 14px !important; padding:14px !important; }
+.signature-section{ padding:6px 18px 10px !important; flex:1; display:flex; flex-direction:column; }
+.signature-title{ font-size:15px !important; }
+/* الخانة داكنة أفتح من البطاقة بإطار ذهبي؛ عند الحفظ يُحوَّل التوقيع إلى كحلي على أبيض ويُقصّ */
+.signature-container{ flex:1; min-height:clamp(260px,46vh,560px); border:2px solid var(--gold) !important; border-radius:14px !important;
+  background:#232c30 !important; box-shadow:inset 0 0 0 4px rgba(211,163,90,.08); }
+#signatureCanvas{ width:100% !important; height:100% !important; position:absolute; inset:0; background:transparent !important; }
+.signature-hint{ color:rgba(211,163,90,.55) !important; font-size:20px !important; }
+.buttons{ padding:0 18px calc(16px + env(safe-area-inset-bottom,0px)) !important; }
+.btn{ padding:16px 20px !important; font-size:17px !important; }
+.btn-confirm{ flex:2 !important; }
+.footer{ padding:10px !important; }
+
+/* التابلت بالعرض والشاشات الواسعة: عمودان — البيانات يميناً والتوقيع يساراً بارتفاع الشاشة */
+@media (min-width: 900px) and (orientation: landscape){
+  .card{ display:grid; grid-template-columns:minmax(320px,36%) 1fr; grid-template-rows:auto auto auto 1fr auto auto;
+    grid-template-areas:"head head" "otp otp" "info sig" "amount sig" "amount btns" "load load"; height:100vh; }
+  .container{ min-height:0; height:100vh; }
+  .footer{ display:none; }
+  .header{ grid-area:head; }
+  .otp-gate{ grid-area:otp; }
+  .receipt-info{ grid-area:info; border-bottom:0 !important; border-left:1px solid var(--border); }
+  .amount-box{ grid-area:amount; align-self:start; }
+  .signature-section{ grid-area:sig; padding:16px 18px 10px !important; }
+  .signature-container{ min-height:0; }
+  .buttons{ grid-area:btns; padding:0 18px 16px !important; }
+  #submitLoading,#successStatus,#errorStatus{ grid-area:load; }
+  .debug-info{ grid-column:1 / -1; }
+}
 .btn{ font-family:inherit; }
 .btn-clear{ background:var(--card2) !important; color:var(--text) !important; border:1px solid var(--border) !important; }
 .btn-clear:hover{ background:var(--border) !important; }
@@ -586,23 +623,11 @@ img.wordmark{ height:46px; width:auto; max-width:min(72vw,260px); display:block;
             canvas = document.getElementById('signatureCanvas');
             ctx = canvas.getContext('2d');
 
-            // Set actual canvas size (not CSS size)
-            const container = canvas.parentElement;
-            const rect = container.getBoundingClientRect();
-
-            // Set canvas dimensions
-            canvas.width = rect.width;
-            canvas.height = 200;
-
-            // Setup drawing style
-            ctx.strokeStyle = '#1e3a5f';
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            // Fill with white background
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            sizeCanvas();
+            // إعادة الضبط عند تغيّر المقاس (تدوير التابلت، ظهور الخانة بعد رمز التحقق) ما دام لم يُوقَّع بعد
+            if (window.ResizeObserver) {
+                new ResizeObserver(() => { if (!hasSignature) sizeCanvas(); }).observe(canvas.parentElement);
+            }
 
             // Mouse Events
             canvas.addEventListener('mousedown', startDraw);
@@ -616,6 +641,73 @@ img.wordmark{ height:46px; width:auto; max-width:min(72vw,260px); display:block;
             canvas.addEventListener('touchend', stopDraw);
 
             console.log('Canvas initialized:', canvas.width, 'x', canvas.height);
+        }
+
+        // خانة داكنة وحبر عاجي على الشاشة؛ السند يأخذ نسخة كحلية على أبيض (exportSignature)
+        const PAD_BG = [35, 44, 48];          // #232c30
+        const PAD_INK = '#f4ecd8';
+        const PRINT_INK = [30, 58, 95];       // #1e3a5f — لون التوقيع السابق في السندات
+
+        function sizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = Math.round(rect.width * dpr);
+            canvas.height = Math.round(rect.height * dpr);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.strokeStyle = PAD_INK;
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.fillStyle = `rgb(${PAD_BG.join(',')})`;
+            ctx.fillRect(0, 0, rect.width, rect.height);
+        }
+
+        // يحوّل الحبر الفاتح إلى كحلي على أبيض، ويقصّ على حدود التوقيع حتى يظهر كبيراً في السند
+        function exportSignature() {
+            const W = canvas.width, H = canvas.height;
+            const src = ctx.getImageData(0, 0, W, H).data;
+            const bgL = (PAD_BG[0] + PAD_BG[1] + PAD_BG[2]) / 3, span = 244 - bgL;
+            const alpha = new Float32Array(W * H);
+            let x0 = W, y0 = H, x1 = -1, y1 = -1;
+            for (let i = 0, k = 0; k < W * H; i += 4, k++) {
+                const a = Math.max(0, Math.min(1, ((src[i] + src[i + 1] + src[i + 2]) / 3 - bgL) / span));
+                alpha[k] = a;
+                if (a > 0.12) {
+                    const x = k % W, y = (k / W) | 0;
+                    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+                }
+            }
+            if (x1 < 0) { x0 = 0; y0 = 0; x1 = W - 1; y1 = H - 1; }
+            const pad = Math.round(14 * Math.min(window.devicePixelRatio || 1, 2));
+            x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+            x1 = Math.min(W - 1, x1 + pad); y1 = Math.min(H - 1, y1 + pad);
+            const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+            const out = document.createElement('canvas');
+            out.width = cw; out.height = ch;
+            const octx = out.getContext('2d');
+            const img = octx.createImageData(cw, ch), d = img.data;
+            for (let y = 0; y < ch; y++) {
+                for (let x = 0; x < cw; x++) {
+                    const a = alpha[(y + y0) * W + (x + x0)], j = (y * cw + x) * 4;
+                    d[j] = 255 + (PRINT_INK[0] - 255) * a;
+                    d[j + 1] = 255 + (PRINT_INK[1] - 255) * a;
+                    d[j + 2] = 255 + (PRINT_INK[2] - 255) * a;
+                    d[j + 3] = 255;
+                }
+            }
+            octx.putImageData(img, 0, 0);
+            // حد أعلى للحجم حتى لا يثقل الإرسال
+            const MAX = 1400;
+            if (cw > MAX) {
+                const sc = document.createElement('canvas');
+                sc.width = MAX; sc.height = Math.round(ch * MAX / cw);
+                const sctx = sc.getContext('2d');
+                sctx.imageSmoothingQuality = 'high';
+                sctx.drawImage(out, 0, 0, sc.width, sc.height);
+                return sc.toDataURL('image/png');
+            }
+            return out.toDataURL('image/png');
         }
 
         function getMousePos(e) {
@@ -708,9 +800,8 @@ img.wordmark{ height:46px; width:auto; max-width:min(72vw,260px); display:block;
         }
 
         function clearSignature() {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
             hasSignature = false;
+            sizeCanvas();
             document.getElementById('signatureHint').classList.remove('hidden');
             document.getElementById('confirmBtn').disabled = true;
         }
@@ -726,7 +817,7 @@ img.wordmark{ height:46px; width:auto; max-width:min(72vw,260px); display:block;
             document.getElementById('submitLoading').classList.add('show');
 
             // Get signature as image
-            const signatureData = canvas.toDataURL('image/png');
+            const signatureData = exportSignature();
 
             // Get receipt data from URL or page
             const urlParams = new URLSearchParams(window.location.search);

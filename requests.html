@@ -471,6 +471,17 @@ img.wordmark{ height:46px; width:auto; max-width:min(72vw,260px); display:block;
 .amount,.details{ color:#c9d0ce; }
 .beneficiary-name{ color:var(--text); font-weight:700; }
 .subject{ color:var(--muted); }
+
+/* ═══ صفحة كاملة: عمود على الجوال، شبكة على الشاشات الواسعة ═══ */
+body{ padding:12px !important; }
+.container{ max-width:none !important; }
+.header{ padding:14px !important; }
+.header h1{ font-size:19px !important; }
+@media (min-width: 760px){
+  body{ padding:18px 24px !important; }
+  .requests-list[style*="flex"]{ display:grid !important; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; align-items:start; }
+  .header,.status-bar,.tabs{ max-width:none; }
+}
 </style>
 </head>
 <body>
