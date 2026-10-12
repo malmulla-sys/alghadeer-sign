@@ -54,6 +54,65 @@ def _verify_token(token: str) -> tuple[bool, str]:
     except Exception:
         return False, ''
 
+# ── السندات الخاصة 🔒: لا تظهر إلا للمدير (role=admin) — مفتاح KV مستقل يبقى بعد التوقيع ──
+PRIVATE_KEY = 'private_sig_ids'
+
+
+def _get_user_role(username: str) -> str:
+    if username == 'bot':
+        return 'admin'
+    users_raw = os.environ.get('SIGNATURE_USERS', '')
+    for user_str in users_raw.split(','):
+        parts = user_str.strip().split(':')
+        if parts and parts[0].strip().lower() == (username or '').lower():
+            return parts[3].strip().lower() if len(parts) > 3 else 'user'
+    return 'user'
+
+
+def _kv_cmd(path: str, body=None):
+    import urllib.request
+    url = f"{KV_REST_API_URL}/{path}"
+    req = urllib.request.Request(url, data=body, method='POST' if body is not None else 'GET')
+    req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+    if body is not None:
+        req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read().decode()).get("result")
+
+
+def _private_ids() -> set:
+    if not (KV_REST_API_URL and KV_REST_API_TOKEN):
+        return set()
+    try:
+        raw = _kv_cmd(f"get/{PRIVATE_KEY}")
+        return set(str(x) for x in (json.loads(raw) if raw else []))
+    except Exception as e:
+        print(f"KV private get error: {e}")
+        return set()
+
+
+def _save_private_ids(ids: set) -> bool:
+    if not (KV_REST_API_URL and KV_REST_API_TOKEN):
+        return False
+    try:
+        _kv_cmd(f"set/{PRIVATE_KEY}", json.dumps(sorted(ids)).encode())
+        return True
+    except Exception as e:
+        print(f"KV private save error: {e}")
+        return False
+
+
+def _visible(items: list, username: str) -> list:
+    """يعلّم الخاص بـ private=True، ويحذفه من القائمة لغير المدير."""
+    priv = _private_ids()
+    for it in items:
+        if str(it.get('id')) in priv:
+            it['private'] = True
+    if _get_user_role(username) == 'admin':
+        return items
+    return [it for it in items if not it.get('private')]
+
+
 # In-memory fallback for local testing (will reset on each deploy)
 _local_requests = {}
 
@@ -157,7 +216,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
 
-        requests = _kv_get_all()
+        requests = _visible(_kv_get_all(), username)
 
         # Sort by created_at descending (newest first)
         requests.sort(key=lambda x: x.get('created_at', ''), reverse=True)
@@ -197,6 +256,24 @@ class handler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length)
             data = json.loads(body.decode('utf-8'))
 
+            # 🔒 تبديل «خاص» لطلب أو سجل قائم — للمدير والبوت فقط
+            if data.get('action') == 'set_private':
+                if _get_user_role(username) != 'admin':
+                    self.wfile.write(json.dumps({'success': False, 'error': 'admin_only'}).encode('utf-8'))
+                    return
+                rid = str(data.get('id', ''))
+                if not rid:
+                    self.wfile.write(json.dumps({'success': False, 'error': 'Missing id'}).encode('utf-8'))
+                    return
+                ids = _private_ids()
+                if data.get('private'):
+                    ids.add(rid)
+                else:
+                    ids.discard(rid)
+                ok = _save_private_ids(ids)
+                self.wfile.write(json.dumps({'success': ok, 'private': bool(data.get('private'))}).encode('utf-8'))
+                return
+
             # Validate required fields
             required = ['id', 'beneficiary_name', 'amount']
             for field in required:
@@ -207,6 +284,12 @@ class handler(BaseHTTPRequestHandler):
                     }).encode())
                     return
 
+            if data.get('private'):
+                ids = _private_ids()
+                ids.add(str(data['id']))
+                if not _save_private_ids(ids):
+                    self.wfile.write(json.dumps({'success': False, 'error': 'private_flag_failed'}).encode('utf-8'))
+                    return
             success = _add_request(data)
 
             self.wfile.write(json.dumps({

@@ -183,6 +183,32 @@
             width: 100%;
         }
 
+        .private-badge {
+            display: inline-block;
+            background: #312e81;
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-inline-end: 6px;
+        }
+
+        .request-card.is-private {
+            border: 2px solid #6366f1;
+        }
+
+        .private-btn {
+            margin-top: 8px;
+            padding: 7px 14px;
+            background: #eef2ff;
+            color: #312e81;
+            border: 1px solid #c7d2fe;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            width: 100%;
+        }
+
         .delete-btn:hover {
             background: #dc2626;
         }
@@ -662,8 +688,9 @@
             }
 
             historyList.innerHTML = history.map(item => `
-                <div class="request-card history-item">
+                <div class="request-card history-item${item.private ? ' is-private' : ''}">
                     <div class="card-header">
+                        ${item.private ? '<span class="private-badge">🔒 خاص</span>' : ''}
                         <span class="history-badge">✅ مكتمل</span>
                         <span class="receipt-no">#${item.receipt_no || "---"}</span>
                         <span class="time">${formatTime(item.signed_at)}</span>
@@ -676,6 +703,7 @@
                             <span class="amount">💰 ${Number(item.amount || 0).toLocaleString()} ريال</span>
                         </div>
                         <div class="subject">${item.subject || ""}</div>
+                        ${privateBtn(item, 'history')}
                     </div>
                 </div>
             `).join('');
@@ -738,10 +766,11 @@
                 requestsList.innerHTML = requests.map((req, index) => {
                     const isNew = newRequests.some(n => n.id === req.id) && lastRequestIds.size > 1;
                     return `
-                        <div class="request-card" onclick="openSignature('${encodeURIComponent(JSON.stringify(req))}')">
+                        <div class="request-card${req.private ? ' is-private' : ''}" onclick="openSignature('${encodeURIComponent(JSON.stringify(req))}')">
                             <div class="request-header">
                                 <span class="request-name">
                                     ${isNew ? '<span class="new-badge">جديد</span>' : ''}
+                                    ${req.private ? '<span class="private-badge">🔒 خاص</span>' : ''}
                                     ${req.beneficiary_name}
                                 </span>
                                 <span class="request-amount">${req.amount} ريال</span>
@@ -756,10 +785,33 @@
                             </div>
                             ${req.staff_note ? `<div class="staff-note"><b>📌 ملاحظة داخلية:</b> ${req.staff_note}</div>` : ''}
                             <div class="request-time">🕐 ${formatTime(req.created_at)}</div>
+                            ${privateBtn(req, 'pending')}
                             ${currentRole === 'admin' ? `<button class="delete-btn" onclick="event.stopPropagation(); deleteRequest('${req.id}', '${req.beneficiary_name}')">🗑️ حذف</button>` : ''}
                         </div>
                     `;
                 }).join('');
+            }
+        }
+
+        // 🔒 السند الخاص: لا يظهر إلا لحساب المدير (الخادم يحجبه عن غيره)
+        function privateBtn(item, where) {
+            if (currentRole !== 'admin') return '';
+            const label = item.private ? '🔓 إلغاء «خاص» — يظهر للزميل' : '🔒 اجعله خاصاً — لي فقط';
+            return `<button class="private-btn" onclick="event.stopPropagation(); togglePrivate('${item.id}', ${item.private ? 'false' : 'true'}, '${where}')">${label}</button>`;
+        }
+
+        async function togglePrivate(id, makePrivate, where) {
+            try {
+                const response = await fetch('/api/requests', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                    body: JSON.stringify({ action: 'set_private', id: id, private: makePrivate })
+                });
+                const result = await response.json();
+                if (!result.success) { alert('تعذّر التغيير: ' + (result.error || '')); return; }
+                if (where === 'history') { historyLoaded = false; loadHistory(); } else { loadRequests(); }
+            } catch (error) {
+                alert('خطأ في الاتصال: ' + error.message);
             }
         }
 

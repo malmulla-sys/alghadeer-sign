@@ -406,6 +406,8 @@ def save_to_history(data: dict) -> bool:
             'subject': data.get('subject', ''),
             'signed_at': datetime.now(RIYADH_TZ).isoformat()
         }
+        if str(data.get('private', '')).lower() in ('1', 'true'):
+            history_entry['private'] = True
 
         # Add to beginning of list
         history.insert(0, history_entry)

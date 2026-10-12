@@ -87,14 +87,66 @@ def _kv_save_history(history: list) -> bool:
         return False
 
 
+
+
+
+# ── السندات الخاصة 🔒: لا تظهر إلا للمدير (role=admin) — مفتاح KV مستقل يبقى بعد التوقيع ──
+PRIVATE_KEY = 'private_sig_ids'
+
+
 def _get_user_role(username: str) -> str:
-    """Get user role from SIGNATURE_USERS"""
+    if username == 'bot':
+        return 'admin'
     users_raw = os.environ.get('SIGNATURE_USERS', '')
     for user_str in users_raw.split(','):
         parts = user_str.strip().split(':')
-        if len(parts) >= 1 and parts[0].strip().lower() == username.lower():
+        if parts and parts[0].strip().lower() == (username or '').lower():
             return parts[3].strip().lower() if len(parts) > 3 else 'user'
     return 'user'
+
+
+def _kv_cmd(path: str, body=None):
+    import urllib.request
+    url = f"{KV_REST_API_URL}/{path}"
+    req = urllib.request.Request(url, data=body, method='POST' if body is not None else 'GET')
+    req.add_header("Authorization", f"Bearer {KV_REST_API_TOKEN}")
+    if body is not None:
+        req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read().decode()).get("result")
+
+
+def _private_ids() -> set:
+    if not (KV_REST_API_URL and KV_REST_API_TOKEN):
+        return set()
+    try:
+        raw = _kv_cmd(f"get/{PRIVATE_KEY}")
+        return set(str(x) for x in (json.loads(raw) if raw else []))
+    except Exception as e:
+        print(f"KV private get error: {e}")
+        return set()
+
+
+def _save_private_ids(ids: set) -> bool:
+    if not (KV_REST_API_URL and KV_REST_API_TOKEN):
+        return False
+    try:
+        _kv_cmd(f"set/{PRIVATE_KEY}", json.dumps(sorted(ids)).encode())
+        return True
+    except Exception as e:
+        print(f"KV private save error: {e}")
+        return False
+
+
+def _visible(items: list, username: str) -> list:
+    """يعلّم الخاص بـ private=True، ويحذفه من القائمة لغير المدير."""
+    priv = _private_ids()
+    for it in items:
+        if str(it.get('id')) in priv:
+            it['private'] = True
+    if _get_user_role(username) == 'admin':
+        return items
+    return [it for it in items if not it.get('private')]
 
 
 class handler(BaseHTTPRequestHandler):
@@ -201,7 +253,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
 
-        history = _kv_get_history()
+        history = _visible(_kv_get_history(), username)
 
         response = {
             'success': True,
