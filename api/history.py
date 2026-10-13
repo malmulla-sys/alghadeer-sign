@@ -95,23 +95,16 @@ PRIVATE_KEY = 'private_sig_ids'
 
 
 def _get_user_role(username: str) -> str:
+    """المدير (حذف + الموقّعة + الخاص) = SIGNATURE_ADMIN_USERS فقط (الافتراضي m.almulla)، أياً كان
+    الدور المكتوب في SIGNATURE_USERS — bilal كان «مدير» هناك فرأى الخاص والموقّعة (2026-10-13)."""
     if username == 'bot':
         return 'admin'
-    users_raw = os.environ.get('SIGNATURE_USERS', '')
-    for user_str in users_raw.split(','):
-        parts = user_str.strip().split(':')
-        if parts and parts[0].strip().lower() == (username or '').lower():
-            return parts[3].strip().lower() if len(parts) > 3 else 'user'
-    return 'user'
+    admins = {u.strip().lower() for u in os.environ.get('SIGNATURE_ADMIN_USERS', 'm.almulla').split(',') if u.strip()}
+    return 'admin' if (username or '').lower() in admins else 'user'
 
-# 2026-10-13: «مدير» هنا = صلاحية الحذف، وحساب الزميل bilal مدير ⟵ كان يرى الخاص.
-# الخاص يُفصل عن الحذف: الحسابات في SIGNATURE_PRIVATE_BLOCKED (الافتراضي bilal) لا ترى الخاص
-# ولا تغيّره ولا تحذفه، ولو كانت «مدير».
+
 def _can_see_private(username: str) -> bool:
-    if username == 'bot':
-        return True
-    blocked = {u.strip().lower() for u in os.environ.get('SIGNATURE_PRIVATE_BLOCKED', 'bilal').split(',') if u.strip()}
-    return _get_user_role(username) == 'admin' and (username or '').lower() not in blocked
+    return _get_user_role(username) == 'admin'
 
 
 def _kv_cmd(path: str, body=None):
@@ -262,6 +255,9 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
 
+        if _get_user_role(username) != 'admin':                 # تبويب «الموقّعة» للمدير وحده
+            self.wfile.write(json.dumps({'success': False, 'error': 'admin_only', 'history': []}).encode('utf-8'))
+            return
         history = _visible(_kv_get_history(), username)
 
         response = {

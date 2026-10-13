@@ -22,7 +22,9 @@ def get_users() -> dict:
             username = parts[0].strip().lower()
             password = parts[1].strip()
             display_name = parts[2].strip() if len(parts) > 2 else username
-            role = parts[3].strip().lower() if len(parts) > 3 else 'user'
+            # المدير = SIGNATURE_ADMIN_USERS فقط (الافتراضي m.almulla) — لا الدور المكتوب هنا (2026-10-13)
+            admins = {u.strip().lower() for u in os.environ.get('SIGNATURE_ADMIN_USERS', 'm.almulla').split(',') if u.strip()}
+            role = 'admin' if username in admins else 'user'
             users[username] = {
                 'password': password,
                 'name': display_name,

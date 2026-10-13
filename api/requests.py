@@ -59,23 +59,16 @@ PRIVATE_KEY = 'private_sig_ids'
 
 
 def _get_user_role(username: str) -> str:
+    """المدير (حذف + الموقّعة + الخاص) = SIGNATURE_ADMIN_USERS فقط (الافتراضي m.almulla)، أياً كان
+    الدور المكتوب في SIGNATURE_USERS — bilal كان «مدير» هناك فرأى الخاص والموقّعة (2026-10-13)."""
     if username == 'bot':
         return 'admin'
-    users_raw = os.environ.get('SIGNATURE_USERS', '')
-    for user_str in users_raw.split(','):
-        parts = user_str.strip().split(':')
-        if parts and parts[0].strip().lower() == (username or '').lower():
-            return parts[3].strip().lower() if len(parts) > 3 else 'user'
-    return 'user'
+    admins = {u.strip().lower() for u in os.environ.get('SIGNATURE_ADMIN_USERS', 'm.almulla').split(',') if u.strip()}
+    return 'admin' if (username or '').lower() in admins else 'user'
 
-# 2026-10-13: «مدير» هنا = صلاحية الحذف، وحساب الزميل bilal مدير ⟵ كان يرى الخاص.
-# الخاص يُفصل عن الحذف: الحسابات في SIGNATURE_PRIVATE_BLOCKED (الافتراضي bilal) لا ترى الخاص
-# ولا تغيّره ولا تحذفه، ولو كانت «مدير».
+
 def _can_see_private(username: str) -> bool:
-    if username == 'bot':
-        return True
-    blocked = {u.strip().lower() for u in os.environ.get('SIGNATURE_PRIVATE_BLOCKED', 'bilal').split(',') if u.strip()}
-    return _get_user_role(username) == 'admin' and (username or '').lower() not in blocked
+    return _get_user_role(username) == 'admin'
 
 
 def _kv_cmd(path: str, body=None):
@@ -234,7 +227,8 @@ class handler(BaseHTTPRequestHandler):
             'success': True,
             'count': len(requests),
             'requests': requests,
-            'can_private': _can_see_private(username)
+            'can_private': _can_see_private(username),
+            'role': _get_user_role(username)
         }
         self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
 
@@ -334,13 +328,13 @@ class handler(BaseHTTPRequestHandler):
                 }).encode())
                 return
 
-            # خاص + حساب لا يرى الخاص ⟵ لا يحذفه (بلا توكن = مسار التوقيع، كما كان)
+            # بتوكن حساب ⟵ الحذف للمدير وحده (بلا توكن = مسارات داخلية، كما كانت)
             _auth = self.headers.get('Authorization', '')
             _tok = _auth.replace('Bearer ', '') if _auth.startswith('Bearer ') else ''
             if _tok:
                 _ok, _user = _verify_token(_tok)
-                if _ok and not _can_see_private(_user) and str(request_id) in _private_ids():
-                    self.wfile.write(json.dumps({'success': False, 'error': 'not_found'}).encode())
+                if not _ok or _get_user_role(_user) != 'admin':      # الحذف للمدير وحده
+                    self.wfile.write(json.dumps({'success': False, 'error': 'admin_only'}).encode())
                     return
 
             success = _remove_request(request_id)

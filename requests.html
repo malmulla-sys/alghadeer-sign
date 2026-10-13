@@ -793,6 +793,13 @@ body{ padding:12px !important; }
                 }
 
                 canPrivate = !!data.can_private;
+                if (data.role && data.role !== currentRole) {        // دور قديم محفوظ في المتصفح
+                    currentRole = data.role;
+                    try { if (localStorage.getItem('signature_role')) localStorage.setItem('signature_role', currentRole);
+                          if (sessionStorage.getItem('signature_role')) sessionStorage.setItem('signature_role', currentRole); } catch (e) {}
+                    document.getElementById('tabsContainer').style.display = currentRole === 'admin' ? 'flex' : 'none';
+                    if (currentRole !== 'admin') switchTab('pending');
+                }
                 displayRequests(data.requests || []);
             } catch (error) {
                 console.error('Error loading requests:', error);
