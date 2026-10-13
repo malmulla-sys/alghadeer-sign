@@ -104,6 +104,15 @@ def _get_user_role(username: str) -> str:
             return parts[3].strip().lower() if len(parts) > 3 else 'user'
     return 'user'
 
+# 2026-10-13: «مدير» هنا = صلاحية الحذف، وحساب الزميل bilal مدير ⟵ كان يرى الخاص.
+# الخاص يُفصل عن الحذف: الحسابات في SIGNATURE_PRIVATE_BLOCKED (الافتراضي bilal) لا ترى الخاص
+# ولا تغيّره ولا تحذفه، ولو كانت «مدير».
+def _can_see_private(username: str) -> bool:
+    if username == 'bot':
+        return True
+    blocked = {u.strip().lower() for u in os.environ.get('SIGNATURE_PRIVATE_BLOCKED', 'bilal').split(',') if u.strip()}
+    return _get_user_role(username) == 'admin' and (username or '').lower() not in blocked
+
 
 def _kv_cmd(path: str, body=None):
     import urllib.request
@@ -144,7 +153,7 @@ def _visible(items: list, username: str) -> list:
     for it in items:
         if str(it.get('id')) in priv:
             it['private'] = True
-    if _get_user_role(username) == 'admin':
+    if _can_see_private(username):
         return items
     return [it for it in items if not it.get('private')]
 
@@ -258,7 +267,8 @@ class handler(BaseHTTPRequestHandler):
         response = {
             'success': True,
             'count': len(history),
-            'history': history
+            'history': history,
+            'can_private': _can_see_private(username)
         }
         self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
 
@@ -309,6 +319,9 @@ class handler(BaseHTTPRequestHandler):
                 'success': False,
                 'error': 'Missing entry id'
             }).encode('utf-8'))
+            return
+        if not _can_see_private(username) and str(entry_id) in _private_ids():
+            self.wfile.write(json.dumps({'success': False, 'error': 'not_found'}).encode('utf-8'))
             return
 
         # Remove from history

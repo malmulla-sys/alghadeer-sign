@@ -732,6 +732,7 @@ body{ padding:12px !important; }
                     return;
                 }
 
+                canPrivate = !!data.can_private;
                 displayHistory(data.history || []);
                 historyLoaded = true;
             } catch (error) {
@@ -791,6 +792,7 @@ body{ padding:12px !important; }
                     return;
                 }
 
+                canPrivate = !!data.can_private;
                 displayRequests(data.requests || []);
             } catch (error) {
                 console.error('Error loading requests:', error);
@@ -859,8 +861,9 @@ body{ padding:12px !important; }
         }
 
         // 🔒 السند الخاص: لا يظهر إلا لحساب المدير (الخادم يحجبه عن غيره)
+        let canPrivate = false;   // من الخادم — bilal مدير للحذف لكنه لا يرى الخاص
         function privateBtn(item, where) {
-            if (currentRole !== 'admin') return '';
+            if (!canPrivate) return '';
             const label = item.private ? '🔓 إلغاء «خاص» — يظهر للزميل' : '🔒 اجعله خاصاً — لي فقط';
             return `<button class="private-btn" onclick="event.stopPropagation(); togglePrivate('${item.id}', ${item.private ? 'false' : 'true'}, '${where}')">${label}</button>`;
         }

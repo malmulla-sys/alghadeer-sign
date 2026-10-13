@@ -68,6 +68,15 @@ def _get_user_role(username: str) -> str:
             return parts[3].strip().lower() if len(parts) > 3 else 'user'
     return 'user'
 
+# 2026-10-13: «مدير» هنا = صلاحية الحذف، وحساب الزميل bilal مدير ⟵ كان يرى الخاص.
+# الخاص يُفصل عن الحذف: الحسابات في SIGNATURE_PRIVATE_BLOCKED (الافتراضي bilal) لا ترى الخاص
+# ولا تغيّره ولا تحذفه، ولو كانت «مدير».
+def _can_see_private(username: str) -> bool:
+    if username == 'bot':
+        return True
+    blocked = {u.strip().lower() for u in os.environ.get('SIGNATURE_PRIVATE_BLOCKED', 'bilal').split(',') if u.strip()}
+    return _get_user_role(username) == 'admin' and (username or '').lower() not in blocked
+
 
 def _kv_cmd(path: str, body=None):
     import urllib.request
@@ -108,7 +117,7 @@ def _visible(items: list, username: str) -> list:
     for it in items:
         if str(it.get('id')) in priv:
             it['private'] = True
-    if _get_user_role(username) == 'admin':
+    if _can_see_private(username):
         return items
     return [it for it in items if not it.get('private')]
 
@@ -224,7 +233,8 @@ class handler(BaseHTTPRequestHandler):
         response = {
             'success': True,
             'count': len(requests),
-            'requests': requests
+            'requests': requests,
+            'can_private': _can_see_private(username)
         }
         self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
 
@@ -258,7 +268,7 @@ class handler(BaseHTTPRequestHandler):
 
             # 🔒 تبديل «خاص» لطلب أو سجل قائم — للمدير والبوت فقط
             if data.get('action') == 'set_private':
-                if _get_user_role(username) != 'admin':
+                if not _can_see_private(username):
                     self.wfile.write(json.dumps({'success': False, 'error': 'admin_only'}).encode('utf-8'))
                     return
                 rid = str(data.get('id', ''))
@@ -323,6 +333,15 @@ class handler(BaseHTTPRequestHandler):
                     'error': 'Missing request id'
                 }).encode())
                 return
+
+            # خاص + حساب لا يرى الخاص ⟵ لا يحذفه (بلا توكن = مسار التوقيع، كما كان)
+            _auth = self.headers.get('Authorization', '')
+            _tok = _auth.replace('Bearer ', '') if _auth.startswith('Bearer ') else ''
+            if _tok:
+                _ok, _user = _verify_token(_tok)
+                if _ok and not _can_see_private(_user) and str(request_id) in _private_ids():
+                    self.wfile.write(json.dumps({'success': False, 'error': 'not_found'}).encode())
+                    return
 
             success = _remove_request(request_id)
 
