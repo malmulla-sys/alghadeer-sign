@@ -41,9 +41,17 @@
     {
       "src": "fonts/*.woff2",
       "use": "@vercel/static"
+    },
+    {
+      "src": "ping.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/ping",
+      "dest": "/ping.html"
+    },
     {
       "src": "/fonts/(.*\\.woff2)",
       "dest": "/fonts/$1",
