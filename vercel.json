@@ -149,7 +149,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/api/miss.py"
+      "dest": "/apply.html"
     }
   ]
 }
