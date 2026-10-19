@@ -37,9 +37,20 @@
     {
       "src": "group_logo_white.png",
       "use": "@vercel/static"
+    },
+    {
+      "src": "fonts/*.woff2",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/fonts/(.*\\.woff2)",
+      "dest": "/fonts/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
     {
       "src": "/group_logo_white.png",
       "dest": "/group_logo_white.png"
