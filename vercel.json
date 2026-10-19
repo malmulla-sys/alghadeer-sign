@@ -68,7 +68,7 @@
       "dest": "/api/apply.py"
     },
     {
-      "src": "/[Aa][Pp][Pp][Ll][Yy]([^/]*)/?",
+      "src": "/(?!api/)[^/]*[Aa][Pp][Pp][Ll][Yy][^/]*/?",
       "dest": "/apply.html"
     },
     {
