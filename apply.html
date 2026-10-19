@@ -14,11 +14,12 @@
 @font-face { font-family: 'Tajawal'; font-style: normal; font-weight: 800; font-display: swap; src: url(/fonts/tajawal-800-latin.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{overflow-x:hidden}
 body{margin:0;background:#f3f4f8;font-family:'Tajawal',Tahoma,Arial,sans-serif;color:#1b1e33;-webkit-text-size-adjust:100%}
 a{color:#2b3073}
-.wrap{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
-.head{background:#2b3073;margin:0 calc(50% - 50vw);padding:28px 24px 52px;display:flex;flex-direction:column;align-items:center;gap:10px;border-bottom:3px solid #cc202e}
+.page{min-height:100vh;display:flex;flex-direction:column}
+.wrap{width:100%;max-width:480px;margin:0 auto;flex:1;display:flex;flex-direction:column}
+.form-wrap{position:relative}
+.head{background:#2b3073;padding:28px 24px 52px;display:flex;flex-direction:column;align-items:center;gap:10px;border-bottom:3px solid #cc202e}
 .head img{height:104px;width:auto;display:block}
 .head .t{font-size:18px;color:#fff;font-weight:800}
 .card{margin:-30px 16px 0;background:#fff;border-radius:20px;box-shadow:0 8px 26px rgba(27,30,51,.09);padding:24px 20px;display:flex;flex-direction:column;gap:18px}
@@ -54,7 +55,7 @@ input.bad{border-color:#cc202e}
 .bar{height:8px;background:#e7e8f2;border-radius:6px;overflow:hidden;display:none}
 .bar i{display:block;height:100%;width:0;background:#2b3073;transition:width .2s}
 .foot{text-align:center;font-size:12px;color:#7b8098;padding:24px 16px 28px;margin-top:auto}
-.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.hp{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none}
 .done{align-items:center;text-align:center;gap:14px;padding:36px 24px}
 .done .c{width:76px;height:76px;border-radius:50%;background:#e8e9f5;display:flex;align-items:center;justify-content:center}
 .done h2{margin:0;font-size:22px;font-weight:800}
@@ -66,11 +67,12 @@ input.bad{border-color:#cc202e}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="page">
   <div class="head">
     <img src="/group_logo_white.png" alt="مجموعة الغدير">
     <div class="t">تقديم طلب</div>
   </div>
+<div class="wrap">
 
   <form class="card" id="form" novalidate autocomplete="on">
     <div class="intro">نرجو تعبئة البيانات التالية بدقة، وإرفاق المستندات.</div>
@@ -92,7 +94,7 @@ input.bad{border-color:#cc202e}
       <input id="f-subj" type="text" maxlength="80" placeholder="جملة مختصرة عن موضوع طلبك">
       <div class="hint"><span>التفاصيل تكون في خطاب الطلب</span><span dir="ltr"><span id="cnt">0</span> / 80</span></div>
     </div>
-    <div class="hp" aria-hidden="true"><input id="f-web" type="text" tabindex="-1" autocomplete="off"></div>
+    <div class="hp" aria-hidden="true" style="position:absolute;right:0;top:0"><input id="f-web" type="text" tabindex="-1" autocomplete="off"></div>
 
     <div class="f" style="gap:10px">
       <div class="lbl">المستندات <span class="req">*</span></div>
@@ -137,6 +139,7 @@ input.bad{border-color:#cc202e}
   </div>
 
   <div class="foot">مجموعة الغدير — <a href="https://alghadeergroup.com" style="color:inherit">alghadeergroup.com</a></div>
+</div>
 </div>
 
 <script>
