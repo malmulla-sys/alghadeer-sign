@@ -146,6 +146,10 @@
     {
       "src": "/",
       "dest": "/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/miss.py"
     }
   ]
 }
