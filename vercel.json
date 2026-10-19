@@ -25,9 +25,29 @@
     {
       "src": "place_signature.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "apply.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "group_logo.png",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/api/apply",
+      "dest": "/api/apply.py"
+    },
+    {
+      "src": "/apply/?",
+      "dest": "/apply.html"
+    },
+    {
+      "src": "/group_logo.png",
+      "dest": "/group_logo.png"
+    },
     {
       "src": "/api/sign",
       "dest": "/api/sign.py"
