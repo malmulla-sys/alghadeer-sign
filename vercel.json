@@ -33,9 +33,17 @@
     {
       "src": "group_logo.png",
       "use": "@vercel/static"
+    },
+    {
+      "src": "group_logo_white.png",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/group_logo_white.png",
+      "dest": "/group_logo_white.png"
+    },
     {
       "src": "/api/apply",
       "dest": "/api/apply.py"
