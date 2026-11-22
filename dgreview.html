@@ -54,6 +54,7 @@ button,input,textarea{font-family:inherit}
 .row.added{background:#f5fbf7}
 .addb{display:block;width:100%;border:0;border-top:1px dashed #c9cce0;background:#fafbff;color:var(--navy);font-weight:800;font-size:14.5px;padding:12px;cursor:pointer}
 .share{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;background:#25d366;color:#fff;font-weight:800;font-size:15px;padding:13px;border-radius:14px;cursor:pointer;margin-top:14px}
+.reset{display:block;width:100%;border:1.5px solid #e9b8bd;background:#fff;color:#cc202e;font-weight:800;font-size:14.5px;padding:12px;border-radius:14px;cursor:pointer;margin-top:10px}
 .share small{display:block;font-weight:700;font-size:12px;opacity:.92}
 .addother{display:block;width:100%;border:1.5px dashed #a9adcf;background:#fff;color:var(--navy);font-weight:800;font-size:14.5px;padding:13px;border-radius:14px;cursor:pointer;margin-top:4px}
 .empty{color:var(--muted);text-align:center;padding:24px;font-weight:700}
@@ -169,6 +170,8 @@ function render(){
        <button class="ib" onclick="openAdd(${a.i})">✎</button><button class="ib del" onclick="rmAdd(${a.i})">✕</button></div>`).join("") + `</div>`;
   }
   h += `<button class="addother" onclick="openAdd(null, '')">＋ إضافة اسم في جهة أو قسم غير مذكور</button>`;
+  const cc = counts();
+  if (cc.del + cc.add + cc.edit) h += `<button class="reset" onclick="resetAll()">↺ إلغاء كل التعديلات وإعادة القائمة كما كانت</button>`;
   h += `<button class="share" onclick="shareLink()"><span>💬</span><span>إرسال الرابط لزميل ليكمل المراجعة<small>تبقى تعديلاتك محفوظة، ويكمل عليها هو ثم يعتمد</small></span></button>`;
   app.innerHTML = h;
   updDock();
@@ -226,6 +229,12 @@ function editItem(id){
     closeSheet(); render(); queueSave();
   };
   const rs = document.getElementById("f_rs"); if (rs) rs.onclick = () => { delete CH.edit[id]; closeSheet(); render(); queueSave(); };
+}
+function resetAll(){
+  const c = counts();
+  if (!confirm(`إلغاء كل التعديلات (حذف ${c.del} · إضافة ${c.add} · تصحيح ${c.edit}) وإعادة القائمة كما وصلت؟`)) return;
+  CH = {del: [], edit: {}, add: [], note: ""};
+  render(); queueSave(); toast("أُعيدت القائمة كما كانت");
 }
 async function shareLink(){
   clearTimeout(saveTimer);
