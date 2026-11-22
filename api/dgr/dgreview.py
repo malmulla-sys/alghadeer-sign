@@ -66,7 +66,12 @@ def _changes(ch, d):
         if isinstance(a, dict) and _c(a.get('name'), 120) and a.get('section') in keys:
             add.append({'k': _c(a.get('k'), 20), 'section': a['section'], 'name': _c(a.get('name'), 120),
                         'phone': _c(a.get('phone'), 30), 'via': _c(a.get('via'), 120), 'title': _c(a.get('title'), 120)})
-    return {'del': dels, 'edit': edit, 'add': add, 'note': _c(ch.get('note'), 600)}
+    tkeys = keys | {t['key'] for t in (d.get('targets') or [])}
+    move = {}                                    # نقل اسم إلى موقع آخر من مواقع المراجع (2026-11-22)
+    for k, v in (ch.get('move') or {}).items():
+        if str(k).isdigit() and int(k) in ids and int(k) not in dels and v in tkeys:
+            move[str(int(k))] = v
+    return {'del': dels, 'edit': edit, 'add': add, 'move': move, 'note': _c(ch.get('note'), 600)}
 
 
 def _notify(text):
@@ -161,7 +166,7 @@ class handler(BaseHTTPRequestHandler):
                     _kv('RPUSH', 'dgr:q', d['token'])
                     c = d['changes']
                     _notify(f"🌴 {d['reviewer']} أرسل مراجعة كشف التمور {d['year']}: "
-                            f"حذف {len(c['del'])} · إضافة {len(c['add'])} · تعديل {len(c['edit'])} — راجعها في صفحة إهداءات التمور.")
+                            f"حذف {len(c['del'])} · إضافة {len(c['add'])} · تعديل {len(c['edit'])} · نقل {len(c['move'])} —راجعها في صفحة إهداءات التمور.")
                     return self._out(200, {'ok': True, 'submitted_at': d['submitted_at']})
                 _put(d)
                 return self._out(200, {'ok': True, 'saved_at': d['saved_at']})

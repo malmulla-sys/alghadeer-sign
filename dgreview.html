@@ -61,6 +61,9 @@ button,input,textarea{font-family:inherit}
 .tag.new{background:var(--green-tint);color:var(--green-mid)}
 .tag.ed{background:var(--gold-tint);color:var(--gold)}
 .tag.x{background:var(--red-tint);color:var(--red)}
+.tag.mv{background:rgba(110,160,230,.16);color:#7fb0ec}
+.row.moved{background:rgba(110,160,230,.07)}
+.ib.mvb{color:#7fb0ec}
 .row.added{background:rgba(58,168,126,.07)}
 .addb{display:block;width:100%;border:0;border-top:1px dashed var(--border);background:transparent;color:var(--green-mid);font-weight:800;font-size:14.5px;padding:12px;cursor:pointer}
 .reset{display:block;width:100%;border:1px solid #6b3a35;background:var(--red-tint);color:var(--red);font-weight:800;font-size:14.5px;padding:12px;border-radius:14px;cursor:pointer;margin-top:10px}
@@ -111,7 +114,7 @@ button,input,textarea{font-family:inherit}
 </div></div>
 <script>
 const T = (location.pathname.match(/\/dg\/([A-Za-z0-9_-]{20,64})/) || [])[1] || new URLSearchParams(location.search).get("t") || "";
-let D = null, CH = {del: [], edit: {}, add: [], note: ""}, sec = null, q = "", saveTimer = null, sending = false;
+let D = null, CH = {del: [], edit: {}, add: [], move: {}, note: ""}, sec = null, q = "", saveTimer = null, sending = false;
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const norm = s => String(s || "").replace(/[ً-ْـ]/g, "").replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).toLowerCase();
 const digits = s => String(s || "").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
@@ -126,10 +129,13 @@ async function call(method, a, body){
 function fail(m){ document.getElementById("app").innerHTML = `<div class="done"><div class="c bad">!</div><h2>تعذّر فتح المراجعة</h2><p>${esc(m)}</p></div>`; }
 function allItems(){ const out = []; for (const s of D.sections) for (const e of s.ents) for (const it of e.items) out.push({...it, section: s.key, ent: e.name}); return out; }
 function cur(it){ return {...it, ...(CH.edit[it.id] || {})}; }
-function counts(){ return {del: CH.del.length, add: CH.add.length, edit: Object.keys(CH.edit).filter(k => !CH.del.includes(+k)).length}; }
+function counts(){ return {del: CH.del.length, add: CH.add.length, edit: Object.keys(CH.edit).filter(k => !CH.del.includes(+k)).length,
+  move: Object.keys(CH.move).filter(k => !CH.del.includes(+k)).length}; }
+function targets(){ return (D.targets && D.targets.length ? D.targets : D.sections).map(x => ({key: x.key, name: x.name})); }
+function secName(k){ const t = targets().find(x => x.key === k); return t ? t.name : k; }
 function updDock(){
-  const c = counts(), n = c.del + c.add + c.edit;
-  document.getElementById("sum").innerHTML = n ? `حذف <b>${c.del}</b> · إضافة <b>${c.add}</b> · تعديل <b>${c.edit}</b>` : "لا تغييرات بعد — إن كانت القائمة سليمة اضغط «اعتماد وإرسال»";
+  const c = counts(), n = c.del + c.add + c.edit + c.move;
+  document.getElementById("sum").innerHTML = n ? `حذف <b>${c.del}</b> · إضافة <b>${c.add}</b> · تعديل <b>${c.edit}</b>${c.move ? ` · نقل <b>${c.move}</b>` : ""}` :"لا تغييرات بعد — إن كانت القائمة سليمة اضغط «اعتماد وإرسال»";
 }
 function queueSave(){
   updDock();
@@ -160,10 +166,11 @@ function render(){
     any = true;
     h += `<div class="ent"><div class="eh"><b>${esc(e.name)}</b><span>${e.items.length - e.items.filter(i => CH.del.includes(i.id)).length + adds.length} اسماً</span></div>`;
     for (const r of rows) {
-      const gone = CH.del.includes(r.id), ed = !!CH.edit[r.id];
+      const gone = CH.del.includes(r.id), ed = !!CH.edit[r.id], mv = !gone && CH.move[r.id];
       const sub = [r.phone ? `<span class="ph">${esc(r.phone)}</span>` : "", esc(r.title != null ? r.title : r.notes), ed && r.via && r.via !== e.name ? "⟵ " + esc(r.via) : ""].filter(Boolean).join(" · ");
-      h += `<div class="row ${gone ? "gone" : ""}"><div class="m"><div class="nm">${esc(r.name)}${gone ? `<span class="tag x">سيُحذف</span>` : ed ? `<span class="tag ed">معدّل</span>` : ""}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
-        ${gone ? `<button class="undo" onclick="undel(${r.id})">تراجع</button>` : `<button class="ib" title="تعديل" onclick="editItem(${r.id})">✎</button><button class="ib del" title="حذف" onclick="del(${r.id})">🗑</button>`}</div>`;
+      const canMove = targets().length > 1;
+      h += `<div class="row ${gone ? "gone" : mv ? "moved" : ""}"><div class="m"><div class="nm">${esc(r.name)}${gone ? `<span class="tag x">سيُحذف</span>` : ed ? `<span class="tag ed">معدّل</span>` : ""}${mv ? `<span class="tag mv">⇄ يُنقل إلى ${esc(secName(mv))}</span>` : ""}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
+        ${gone ? `<button class="undo" onclick="undel(${r.id})">تراجع</button>` : `<button class="ib" title="تعديل" onclick="editItem(${r.id})">✎</button>${canMove ? `<button class="ib mvb" title="نقل إلى موقع آخر" onclick="moveItem(${r.id})">⇄</button>` : ""}<button class="ib del" title="حذف" onclick="del(${r.id})">🗑</button>`}</div>`;
     }
     for (const a of adds) {
       const sub = [a.phone ? `<span class="ph">${esc(a.phone)}</span>` : "", esc(a.title)].filter(Boolean).join(" · ");
@@ -181,12 +188,24 @@ function render(){
   }
   h += `<button class="addother" onclick="openAdd(null, '')">＋ إضافة اسم في جهة أو قسم غير مذكور</button>`;
   const cc = counts();
-  if (cc.del + cc.add + cc.edit) h += `<button class="reset" onclick="resetAll()">↺ إلغاء كل التعديلات وإعادة القائمة كما كانت</button>`;
+  if (cc.del + cc.add + cc.edit + cc.move) h += `<button class="reset" onclick="resetAll()">↺ إلغاء كل التعديلات وإعادة القائمة كما كانت</button>`;
   h += `<button class="share" onclick="shareLink()"><span>💬</span><span>إرسال الرابط لزميل ليكمل المراجعة<small>تبقى تعديلاتك محفوظة، ويكمل عليها هو ثم يعتمد</small></span></button>`;
   app.innerHTML = h;
   updDock();
 }
 function del(id){ if (!CH.del.includes(id)) CH.del.push(id); render(); queueSave(); }
+function moveItem(id){
+  const it = allItems().find(x => x.id === id), now = CH.move[id];
+  const opts = targets().filter(t => t.key !== it.section).map(t =>
+    `<button class="${now === t.key ? "pri" : ""}" data-to="${esc(t.key)}">${esc(t.name)}</button>`).join("");
+  sheet(`<h2>نقل «${esc(cur(it).name)}»</h2><div class="hint">من ${esc(secName(it.section))} — ${esc(it.ent)} إلى:</div>
+    <div class="acts" style="flex-wrap:wrap">${opts}</div>
+    <div class="acts">${now ? `<button class="dng" id="f_rs">إلغاء النقل</button>` : ""}<button onclick="closeSheet()">رجوع</button></div>`);
+  document.querySelectorAll("#ov [data-to]").forEach(b => b.onclick = () => {
+    CH.move[id] = b.dataset.to; closeSheet(); render(); queueSave(); toast("سيُنقل إلى " + secName(b.dataset.to));
+  });
+  const rs = document.getElementById("f_rs"); if (rs) rs.onclick = () => { delete CH.move[id]; closeSheet(); render(); queueSave(); };
+}
 function undel(id){ CH.del = CH.del.filter(x => x !== id); render(); queueSave(); }
 function rmAdd(i){ const a = CH.add[i]; if (confirm(`إزالة «${a.name}» من الإضافات؟`)) { CH.add.splice(i, 1); render(); queueSave(); } }
 function closeSheet(){ const o = document.getElementById("ov"); if (o) o.remove(); }
@@ -242,8 +261,8 @@ function editItem(id){
 }
 function resetAll(){
   const c = counts();
-  if (!confirm(`إلغاء كل التعديلات (حذف ${c.del} · إضافة ${c.add} · تصحيح ${c.edit}) وإعادة القائمة كما وصلت؟`)) return;
-  CH = {del: [], edit: {}, add: [], note: ""};
+  if (!confirm(`إلغاء كل التعديلات (حذف ${c.del} · إضافة ${c.add} · تصحيح ${c.edit} · نقل ${c.move}) وإعادة القائمة كما وصلت؟`)) return;
+  CH = {del: [], edit: {}, add: [], move: {}, note: ""};
   render(); queueSave(); toast("أُعيدت القائمة كما كانت");
 }
 async function shareLink(){
@@ -260,7 +279,7 @@ ${url}`;
 function confirmSend(){
   const c = counts();
   sheet(`<h2>اعتماد المراجعة وإرسالها</h2>
-    <div class="sumlist">حذف: <b>${c.del}</b> اسماً<br>إضافة: <b>${c.add}</b> اسماً<br>تصحيح: <b>${c.edit}</b> اسماً${!(c.del + c.add + c.edit) ? "<br>— القائمة معتمدة كما هي دون تغيير" : ""}</div>
+    <div class="sumlist">حذف: <b>${c.del}</b> اسماً<br>إضافة: <b>${c.add}</b> اسماً<br>تصحيح: <b>${c.edit}</b> اسماً${c.move ? `<br>نقل إلى موقع آخر: <b>${c.move}</b> اسماً` : ""}${!(c.del + c.add + c.edit + c.move) ? "<br>— القائمة معتمدة كما هي دون تغيير" : ""}</div>
     <label>ملاحظة (اختياري)</label><textarea id="f_note" rows="3" maxlength="600">${esc(CH.note)}</textarea>
     <div class="hint" style="margin-top:8px">بعد الإرسال لا يمكن التعديل من هذا الرابط.</div>
     <div class="err" id="f_err" hidden></div>
@@ -278,7 +297,7 @@ function showDone(at){
   document.getElementById("dock").hidden = true;
   const c = counts();
   document.getElementById("app").innerHTML = `<div class="done"><div class="c">✓</div><h2>شكراً لك، أُرسلت المراجعة</h2>
-    <p>حذف ${c.del} · إضافة ${c.add} · تصحيح ${c.edit}${at ? `<br>${esc(at)}` : ""}<br>وصلت إلى المراجع وسيعتمدها في الكشف.</p></div>`;
+    <p>حذف ${c.del} · إضافة ${c.add} · تصحيح ${c.edit}${c.move ? " · نقل " + c.move : ""}${at ? `<br>${esc(at)}` : ""}<br>وصلت إلى المراجع وسيعتمدها في الكشف.</p></div>`;
 }
 (async () => {
   if (!T) return fail("الرابط ناقص.");
@@ -288,7 +307,7 @@ function showDone(at){
     document.getElementById("ht").textContent = `مجموعة الغدير — إهداءات التمور لعام ${D.year} هـ`;
     document.getElementById("h1").textContent = D.title || "مراجعة الأسماء";
     document.getElementById("hto").textContent = "إلى: " + D.reviewer;
-    if (D.changes) CH = {del: D.changes.del || [], edit: D.changes.edit || {}, add: D.changes.add || [], note: D.changes.note || ""};
+    if (D.changes) CH = {del: D.changes.del || [], edit: D.changes.edit || {}, add: D.changes.add || [], move: D.changes.move || {}, note: D.changes.note || ""};
     if (D.status !== "open") return showDone(D.submitted_at);
     document.getElementById("dock").hidden = false;
     render();
