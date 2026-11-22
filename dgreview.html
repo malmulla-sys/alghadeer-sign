@@ -163,7 +163,6 @@ function render(){
       const gone = CH.del.includes(r.id), ed = !!CH.edit[r.id];
       const sub = [r.phone ? `<span class="ph">${esc(r.phone)}</span>` : "", esc(r.title != null ? r.title : r.notes), ed && r.via && r.via !== e.name ? "⟵ " + esc(r.via) : ""].filter(Boolean).join(" · ");
       h += `<div class="row ${gone ? "gone" : ""}"><div class="m"><div class="nm">${esc(r.name)}${gone ? `<span class="tag x">سيُحذف</span>` : ed ? `<span class="tag ed">معدّل</span>` : ""}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
-        <span class="qty">${r.qty} ${esc(D.unit || "كرتون")}</span>
         ${gone ? `<button class="undo" onclick="undel(${r.id})">تراجع</button>` : `<button class="ib" title="تعديل" onclick="editItem(${r.id})">✎</button><button class="ib del" title="حذف" onclick="del(${r.id})">🗑</button>`}</div>`;
     }
     for (const a of adds) {

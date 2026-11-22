@@ -113,6 +113,10 @@ class handler(BaseHTTPRequestHandler):
                 if not d:
                     return self._out(404, {'ok': False, 'error': 'الرابط غير صالح أو انتهت مدته'})
                 d.pop('token', None)
+                for s in d.get('sections', []):          # الكمية لا تُعرض للمراجع (طلب المستخدم)
+                    for e in s.get('ents', []):
+                        for it in e.get('items', []):
+                            it.pop('qty', None)
                 return self._out(200, {'ok': True, 'data': d})
             if not self._bot():
                 return self._out(401, {'ok': False})
