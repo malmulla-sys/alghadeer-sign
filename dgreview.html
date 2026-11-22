@@ -229,7 +229,7 @@ function openAdd(i, via){
 function editItem(id){
   const it = allItems().find(x => x.id === id); const c = cur(it);
   const v = {name: c.name, phone: c.phone, via: c.via != null ? c.via : it.ent, title: c.title != null ? c.title : (it.notes || "")};
-  sheet(form(v, "تصحيح البيانات", "الكمية ليست ضمن المراجعة") +
+  sheet(form(v, "تصحيح البيانات", "") +
     `<div class="acts"><button class="pri" id="f_ok">حفظ</button><button onclick="closeSheet()">إلغاء</button>${CH.edit[id] ? `<button class="dng" id="f_rs">إلغاء التصحيح</button>` : ""}</div>`);
   document.getElementById("f_ok").onclick = () => {
     const n = readForm(); if (!n) return;
