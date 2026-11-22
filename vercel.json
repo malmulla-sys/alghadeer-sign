@@ -43,6 +43,10 @@
       "use": "@vercel/static"
     },
     {
+      "src": "dgreview.html",
+      "use": "@vercel/static"
+    },
+    {
       "src": "ping.html",
       "use": "@vercel/static"
     }
@@ -62,6 +66,14 @@
     {
       "src": "/group_logo_white.png",
       "dest": "/group_logo_white.png"
+    },
+    {
+      "src": "/api/dgreview",
+      "dest": "/api/dgreview.py"
+    },
+    {
+      "src": "/dg/(.*)",
+      "dest": "/dgreview.html"
     },
     {
       "src": "/api/apply",
