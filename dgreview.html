@@ -53,6 +53,8 @@ button,input,textarea{font-family:inherit}
 .tag.x{background:#fde4e6;color:var(--red)}
 .row.added{background:#f5fbf7}
 .addb{display:block;width:100%;border:0;border-top:1px dashed #c9cce0;background:#fafbff;color:var(--navy);font-weight:800;font-size:14.5px;padding:12px;cursor:pointer}
+.share{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;background:#25d366;color:#fff;font-weight:800;font-size:15px;padding:13px;border-radius:14px;cursor:pointer;margin-top:14px}
+.share small{display:block;font-weight:700;font-size:12px;opacity:.92}
 .addother{display:block;width:100%;border:1.5px dashed #a9adcf;background:#fff;color:var(--navy);font-weight:800;font-size:14.5px;padding:13px;border-radius:14px;cursor:pointer;margin-top:4px}
 .empty{color:var(--muted);text-align:center;padding:24px;font-weight:700}
 .dock{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(27,30,51,.08);padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));z-index:40}
@@ -167,6 +169,7 @@ function render(){
        <button class="ib" onclick="openAdd(${a.i})">✎</button><button class="ib del" onclick="rmAdd(${a.i})">✕</button></div>`).join("") + `</div>`;
   }
   h += `<button class="addother" onclick="openAdd(null, '')">＋ إضافة اسم في جهة أو قسم غير مذكور</button>`;
+  h += `<button class="share" onclick="shareLink()"><span>💬</span><span>إرسال الرابط لزميل ليكمل المراجعة<small>تبقى تعديلاتك محفوظة، ويكمل عليها هو ثم يعتمد</small></span></button>`;
   app.innerHTML = h;
   updDock();
 }
@@ -223,6 +226,17 @@ function editItem(id){
     closeSheet(); render(); queueSave();
   };
   const rs = document.getElementById("f_rs"); if (rs) rs.onclick = () => { delete CH.edit[id]; closeSheet(); render(); queueSave(); };
+}
+async function shareLink(){
+  clearTimeout(saveTimer);
+  try { const j = await call("POST", "save", {t: T, changes: CH}); document.getElementById("sv").textContent = "✓ حُفظ " + (j.saved_at || "").slice(11); }
+  catch (e) { toast("⚠️ لم تُحفظ تعديلاتك — تحقق من الاتصال ثم أعد المحاولة"); return; }
+  const url = location.origin + "/dg/" + T;
+  const msg = `السلام عليكم،
+أرجو إكمال مراجعة أسماء كشف إهداءات التمور لعام ${D.year} هـ (قائمة ${D.reviewer}): احذف من لا يلزم، وأضف الأسماء الجديدة بأرقامهم وجهات عملهم، ثم اضغط «اعتماد وإرسال».
+${url}`;
+  location.href = "https://wa.me/?text=" + encodeURIComponent(msg);
+  setTimeout(() => toast("بعد إرسال الرابط أغلق الصفحة حتى لا تعدّلا في الوقت نفسه"), 800);
 }
 function confirmSend(){
   const c = counts();
