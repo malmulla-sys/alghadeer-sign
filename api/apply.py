@@ -52,6 +52,19 @@ def _clean(s, n):
     return re.sub(r'\s+', ' ', str(s or '')).strip()[:n]
 
 
+def _is_dg(path):
+    """/api/dgreview يُخدَم من هنا — باقة Vercel المجانية تقف عند 12 دالة."""
+    return 'dgreview' in path or 'svc=dg' in path
+
+
+def _dg():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('dgreview', os.path.join(os.path.dirname(__file__), 'dgr', 'dgreview.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.handler
+
+
 class handler(BaseHTTPRequestHandler):
     def _out(self, code, obj):
         self.send_response(code)
@@ -78,6 +91,8 @@ class handler(BaseHTTPRequestHandler):
 
     # ───────── المكتب ─────────
     def do_GET(self):
+        if _is_dg(self.path):
+            return _dg().do_GET(self)
         try:
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             if not self._bot():
@@ -101,6 +116,8 @@ class handler(BaseHTTPRequestHandler):
             return self._out(500, {'ok': False, 'error': str(e)[:200]})
 
     def do_POST(self):
+        if _is_dg(self.path):
+            return _dg().do_POST(self)
         try:
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             a = q.get('a')

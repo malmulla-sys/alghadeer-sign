@@ -69,7 +69,7 @@
     },
     {
       "src": "/api/dgreview",
-      "dest": "/api/dgreview.py"
+      "dest": "/api/apply.py?svc=dg"
     },
     {
       "src": "/dg/(.*)",
